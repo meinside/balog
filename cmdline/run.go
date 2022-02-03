@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	defaultConfigFilepath = ".config/balog.json"
-	defaultDBFilepath     = ".config/balog.db"
+	defaultConfigDir      = ".config"
+	defaultConfigFilename = "balog.json"
+	defaultDBFilename     = "balog.db"
 )
 
 const (
@@ -92,7 +93,7 @@ func ProcessArgs(args []string) {
 	if config, err := loadConfig(confFilepath); err == nil {
 		if config.DBFilepath == nil {
 			homedir, _ := os.UserHomeDir()
-			fallbackDBFilepath := filepath.Join(homedir, defaultDBFilepath)
+			fallbackDBFilepath := filepath.Join(homedir, defaultConfigDir, defaultDBFilename)
 
 			util.Log("`db_filepath` is missing in config file, using default: '%s'", fallbackDBFilepath)
 
@@ -135,43 +136,46 @@ func checkArg(arg *string, expectedArg, action action) {
 
 // loadConfig loads config, if it doesn't exist, create it
 func loadConfig(customConfigFilepath *string) (cfg config, err error) {
-	var homedir string
-	homedir, err = os.UserHomeDir()
-	if err == nil {
-		var confFilepath string
-		if customConfigFilepath == nil || len(*customConfigFilepath) <= 0 {
-			confFilepath = filepath.Join(homedir, defaultConfigFilepath)
+	var confFilepath string
+	if customConfigFilepath == nil || len(*customConfigFilepath) <= 0 {
+		var homedir string
+		homedir, err = os.UserHomeDir()
+		if err == nil {
+			confFilepath = filepath.Join(homedir, defaultConfigDir, defaultConfigFilename)
 		} else {
-			confFilepath = *customConfigFilepath
+			return cfg, err
 		}
+	} else {
+		confFilepath = *customConfigFilepath
+	}
 
-		if _, err = os.Stat(confFilepath); err == nil {
-			// read config file
-			var bytes []byte
-			if bytes, err = os.ReadFile(confFilepath); err == nil {
-				if err = json.Unmarshal(bytes, &cfg); err == nil {
-					return cfg, nil
-				}
+	if _, err = os.Stat(confFilepath); err == nil {
+		// read config file
+		var bytes []byte
+		if bytes, err = os.ReadFile(confFilepath); err == nil {
+			if err = json.Unmarshal(bytes, &cfg); err == nil {
+				return cfg, nil
 			}
-		} else if os.IsNotExist(err) {
-			// create a default config file
-			var file *os.File
-			if file, err = os.Create(confFilepath); err == nil {
-				defer file.Close()
+		}
+	} else if os.IsNotExist(err) {
+		// create a default config file
+		var file *os.File
+		if file, err = os.Create(confFilepath); err == nil {
+			defer file.Close()
 
-				dbFilepath := filepath.Join(homedir, defaultDBFilepath)
-				cfg = config{
-					DBFilepath: &dbFilepath,
-				}
+			dbDirpath := filepath.Dir(confFilepath)
+			dbFilepath := filepath.Join(dbDirpath, defaultDBFilename)
+			cfg = config{
+				DBFilepath: &dbFilepath,
+			}
 
-				// write default config
-				var bytes []byte
-				if bytes, err = json.Marshal(cfg); err == nil {
-					if _, err = file.Write(bytes); err == nil {
-						util.Log("Created default config file: '%s'", confFilepath)
-					}
-					return cfg, nil
+			// write default config
+			var bytes []byte
+			if bytes, err = json.Marshal(cfg); err == nil {
+				if _, err = file.Write(bytes); err == nil {
+					util.Log("Created default config file: '%s'", confFilepath)
 				}
+				return cfg, nil
 			}
 		}
 	}
