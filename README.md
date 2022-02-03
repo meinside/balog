@@ -38,7 +38,7 @@ $ balog -h
 It can be run from the shell directly:
 
 ```bash
-$ balog -action log -ip 8.8.8.8 -protocol ssh
+$ balog -action save -ip 8.8.8.8 -protocol ssh
 ```
 
 or it can be called from fail2ban's ban action:
@@ -77,7 +77,7 @@ actioncheck =
 # Tags:    See jail.conf(5) man page
 # Values:  CMD
 #
-actionban = /path/to/my/balog -action log -ip <ip> -protocol <protocol>
+actionban = /path/to/my/balog -action save -ip <ip> -protocol <protocol>
 
 # Option:  actionunban
 # Notes.:  command executed when unbanning an IP. Take care that the
