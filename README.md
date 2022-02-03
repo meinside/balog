@@ -51,7 +51,7 @@ Copy `/etc/fail2ban/action.d/iptables-multiport.conf` to `/etc/fail2ban/action.d
 $ sudo cp /etc/fail2ban/action.d/iptables-multiport.conf /etc/fail2ban/action.d/iptables-multiport-balog.conf
 ```
 
-then add one line below the `banaction`:
+then append one line below the `actionban`:
 
 ```
 # from original
