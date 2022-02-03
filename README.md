@@ -116,6 +116,19 @@ You can put the above commands in your crontab:
 0 0 1 * * balog -action report -format plain > /tmp/report_monthly.txt
 ```
 
+### Maintenance
+
+```bash
+# list unknown ips
+$ balog -action maintenance -job list_unknown_ips
+
+# resolve unknown ips through ipapi.co
+$ balog -action maintenance -job resolve_unknown_ips
+
+# purge logs
+$ balog -action maintenance -job purge_logs
+```
+
 ## License
 
 MIT
