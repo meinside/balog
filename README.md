@@ -65,6 +65,8 @@ actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
 
 Change `/path/to/balog` and `/path/to/balog.json` to yours,
 
+(NOTE: fail2ban-generated config and database files will be owned by `root`)
+
 and add a custom ban action in your `/etc/fail2ban/jail.local` file:
 
 ```
