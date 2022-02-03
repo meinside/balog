@@ -59,7 +59,7 @@ then append one line below the `actionban`:
 
 # to this one
 actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
-            /path/to/balog -config /path/to/balog.json -action save -ip <ip> -protocol <protocol>
+            /path/to/balog -config /path/to/balog.json -action save -ip <ip> -protocol <name>
 
 ```
 
