@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	configFilepath    = ".config/balog.json"
-	defaultDBFilepath = ".config/balog.db"
+	defaultConfigFilepath = ".config/balog.json"
+	defaultDBFilepath     = ".config/balog.db"
 )
 
 const (
+	paramConfig   = "config"
 	paramAction   = "action"
 	paramIP       = "ip"
 	paramProtocol = "protocol"
@@ -71,12 +72,24 @@ $ %[1]s -action report -format <format>
 
 # perform maintenance (job = list_unknown_ips, resolve_unknown_ips, purge_logs)
 $ %[1]s -action maintenance -job <job>
+
+# for loading config file from a location you want (default: ~/.config/balog.json)
+$ %[1]s -config <config_filepath> ...
 `, os.Args[0])
 }
 
 // ProcessArgs processes command line arguments
 func ProcessArgs(args []string) {
-	if config, err := loadConfig(); err == nil {
+	// parse params
+	var confFilepath *string = flag.String(paramConfig, "", "Config filepath")
+	var action *string = flag.String(paramAction, "", "Action to perform")
+	var ip *string = flag.String(paramIP, "", "IP address of the ban action")
+	var protocol *string = flag.String(paramProtocol, "", "Protocol of the ban action")
+	var format *string = flag.String(paramFormat, "", "Output format of the report")
+	var job *string = flag.String(paramJob, "", "Maintenance job to perform")
+	flag.Parse()
+
+	if config, err := loadConfig(confFilepath); err == nil {
 		if config.DBFilepath == nil {
 			homedir, _ := os.UserHomeDir()
 			fallbackDBFilepath := filepath.Join(homedir, defaultDBFilepath)
@@ -91,24 +104,16 @@ func ProcessArgs(args []string) {
 			util.LogAndExit(1, "Failed to open database: %s", err)
 		}
 
-		// parse params
-		var action *string = flag.String(paramAction, "", "Action to perform")
-		var ip *string = flag.String(paramIP, "", "IP address of the ban action")
-		var protocol *string = flag.String(paramProtocol, "", "Protocol of the ban action")
-		var format *string = flag.String(paramFormat, "", "Output format of the report")
-		var job *string = flag.String(paramJob, "", "Maintenance job to perform")
-		flag.Parse()
-
 		switch *action {
 		case string(actionSave):
-			checkArg(ip, actionSave)
-			checkArg(protocol, actionSave)
+			checkArg(ip, paramIP, actionSave)
+			checkArg(protocol, paramProtocol, actionSave)
 			processSave(db, protocol, ip)
 		case string(actionReport):
-			checkArg(format, actionReport)
+			checkArg(format, paramFormat, actionReport)
 			processReport(db, format, config.TelegraphAccessToken)
 		case string(actionMaintenance):
-			checkArg(job, actionMaintenance)
+			checkArg(job, paramJob, actionMaintenance)
 			processMaintenance(db, job)
 		default:
 			util.Log("Unknown action was given: '%s'", *action)
@@ -121,19 +126,24 @@ func ProcessArgs(args []string) {
 }
 
 // check argument's existence and exit program if it's missing
-func checkArg(arg *string, action action) {
+func checkArg(arg *string, expectedArg, action action) {
 	if len(*arg) <= 0 {
-		util.Log("Parameter `%s` is required for action '%s'", *arg, action)
+		util.Log("Parameter `-%s` is required for action '%s'.", expectedArg, action)
 		ShowUsage()
 	}
 }
 
 // loadConfig loads config, if it doesn't exist, create it
-func loadConfig() (cfg config, err error) {
+func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 	var homedir string
 	homedir, err = os.UserHomeDir()
 	if err == nil {
-		confFilepath := filepath.Join(homedir, configFilepath)
+		var confFilepath string
+		if customConfigFilepath == nil || len(*customConfigFilepath) <= 0 {
+			confFilepath = filepath.Join(homedir, defaultConfigFilepath)
+		} else {
+			confFilepath = *customConfigFilepath
+		}
 
 		if _, err = os.Stat(confFilepath); err == nil {
 			// read config file

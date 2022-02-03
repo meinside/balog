@@ -38,7 +38,7 @@ $ balog -h
 It can be run from the shell directly:
 
 ```bash
-$ balog -action log -ip 8.8.8.8 -protocol ssh
+$ balog -action save -ip 8.8.8.8 -protocol ssh
 ```
 
 or it can be called from fail2ban's ban action:
@@ -77,7 +77,7 @@ actioncheck =
 # Tags:    See jail.conf(5) man page
 # Values:  CMD
 #
-actionban = /path/to/my/balog -action log -ip <ip> -protocol <protocol>
+actionban = /path/to/my/balog -action save -ip <ip> -protocol <protocol>
 
 # Option:  actionunban
 # Notes.:  command executed when unbanning an IP. Take care that the
@@ -114,6 +114,19 @@ You can put the above commands in your crontab:
 ```crontab
 0 0 * * 1 balog -action report -format plain > /tmp/report_weekly.txt
 0 0 1 * * balog -action report -format plain > /tmp/report_monthly.txt
+```
+
+### Maintenance
+
+```bash
+# list unknown ips
+$ balog -action maintenance -job list_unknown_ips
+
+# resolve unknown ips through ipapi.co
+$ balog -action maintenance -job resolve_unknown_ips
+
+# purge logs
+$ balog -action maintenance -job purge_logs
 ```
 
 ## License
