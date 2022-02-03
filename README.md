@@ -41,59 +41,45 @@ It can be run from the shell directly:
 $ balog -action save -ip 8.8.8.8 -protocol ssh
 ```
 
-or it can be called from fail2ban's ban action:
+or it can be called from fail2ban's ban action.
+
+#### Fail2ban Configuration
+
+Copy `/etc/fail2ban/action.d/iptables-multiport.conf` to `/etc/fail2ban/action.d/iptables-multiport-balog.conf`:
+
+```bash
+$ sudo cp /etc/fail2ban/action.d/iptables-multiport.conf /etc/fail2ban/action.d/iptables-multiport-balog.conf
+```
+
+then add one line below the `banaction`:
 
 ```
-# Fail2Ban configuration file
-#
-# /etc/fail2ban/action.d/log-ban-action.conf
-#
-# Modified from /etc/fail2ban/action.d/iptables-multiport.conf
-#
+# from original
+#actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
 
-[Definition]
-
-# Option:  actionstart
-# Notes.:  command executed on demand at the first ban (or at the start of Fail2Ban if actionstart_on_demand is set to false).
-# Values:  CMD
-#
-actionstart =
-
-# Option:  actionstop
-# Notes.:  command executed at the stop of jail (or at the end of Fail2Ban)
-# Values:  CMD
-#
-actionstop =
-
-# Option:  actioncheck
-# Notes.:  command executed once before each actionban command
-# Values:  CMD
-#
-actioncheck =
-
-# Option:  actionban
-# Notes.:  command executed when banning an IP. Take care that the
-#          command is executed with Fail2Ban user rights.
-# Tags:    See jail.conf(5) man page
-# Values:  CMD
-#
-actionban = /path/to/my/balog -action save -ip <ip> -protocol <protocol>
-
-# Option:  actionunban
-# Notes.:  command executed when unbanning an IP. Take care that the
-#          command is executed with Fail2Ban user rights.
-# Tags:    See jail.conf(5) man page
-# Values:  CMD
-#
-actionunban =
-
-[Init]
+# to this one
+actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
+            /path/to/balog -config /path/to/balog.json -action save -ip <ip> -protocol <protocol>
 
 ```
 
-Change `/path/to/my/balog` to the installed path, eg. `$GOPATH/bin/balog`,
+Change `/path/to/balog` and `/path/to/balog.json` to yours,
 
-and `sudo systemctl restart fail2ban.service`.
+and add a custom ban action in your `/etc/fail2ban/jail.local` file:
+
+```
+# ...
+
+[DEFAULT]
+
+# ...
+
+# custom ban action
+banaction = iptables-multiport-balog
+
+```
+
+Finally, `sudo systemctl restart fail2ban.service` to apply changes.
 
 
 ### Reporting
