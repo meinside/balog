@@ -51,7 +51,7 @@ Duplicate `iptables-multiport.conf` to `iptables-multiport-balog.conf`:
 $ sudo cp /etc/fail2ban/action.d/iptables-multiport.conf /etc/fail2ban/action.d/iptables-multiport-balog.conf
 ```
 
-then append one line below the `actionban` in that file:
+then append 3 lines below the `actionban` in that file:
 
 ```
 # /etc/fail2ban/action.d/iptables-multiport-balog.conf
@@ -60,8 +60,11 @@ then append one line below the `actionban` in that file:
 #actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
 
 # to this one
+# ('<restored>' is checked for not saving duplicated ban actions on restarts of fail2ban)
 actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
-            /path/to/balog -config /path/to/balog.json -action save -ip <ip> -protocol <name>
+            if [ '<restored>' = '0' ]; then
+              /path/to/balog -config /path/to/balog.json -action save -ip <ip> -protocol <name>
+            fi
 
 ```
 
