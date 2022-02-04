@@ -45,17 +45,17 @@ or it can be called from fail2ban's ban action.
 
 #### Fail2ban Configuration
 
-Copy `iptables-multiport.conf` to `iptables-multiport-balog.conf`,
-and `iptables-allports.conf` to `iptables-allports-balog.conf`:
+Duplicate `iptables-multiport.conf` to `iptables-multiport-balog.conf`:
 
 ```bash
 $ sudo cp /etc/fail2ban/action.d/iptables-multiport.conf /etc/fail2ban/action.d/iptables-multiport-balog.conf
-$ sudo cp /etc/fail2ban/action.d/iptables-allports.conf /etc/fail2ban/action.d/iptables-allports-balog.conf
 ```
 
-then append one line below the `actionban` in each file:
+then append one line below the `actionban` in that file:
 
 ```
+# /etc/fail2ban/action.d/iptables-multiport-balog.conf
+
 # from original
 #actionban = <iptables> -I f2b-<name> 1 -s <ip> -j <blocktype>
 
@@ -80,7 +80,6 @@ and add custom ban actions in your `/etc/fail2ban/jail.local` file:
 
 # custom ban actions
 banaction = iptables-multiport-balog
-banaction_allports = iptables-allports-balog
 
 ```
 
