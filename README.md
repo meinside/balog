@@ -105,7 +105,7 @@ $ balog -action report -format telegraph
 You can put the above commands in your crontab:
 
 ```crontab
-0 0 * * 1 balog -action report -format plain > /tmp/report_weekly.txt
+0 0 * * 0 balog -action report -format plain > /tmp/report_weekly.txt
 0 0 1 * * balog -action report -format plain > /tmp/report_monthly.txt
 ```
 
