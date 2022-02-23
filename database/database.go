@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -50,11 +51,55 @@ type Report struct {
 	Last30Days SubReport `json:"last_30_days"`
 }
 
+type keyValue struct {
+	Key   string
+	Value int
+}
+
+type keyValues []keyValue
+
+func (kvs *keyValues) Set(key string, value int) {
+	for i, kv := range *kvs {
+		if kv.Key == key {
+			(*kvs)[i].Value = value
+			return
+		}
+	}
+
+	*kvs = append(*kvs, keyValue{
+		Key:   key,
+		Value: value,
+	})
+}
+
+func (kvs *keyValues) Get(key string) (value int, exists bool) {
+	for _, kv := range *kvs {
+		if kv.Key == key {
+			return kv.Value, true
+		}
+	}
+
+	return 0, false
+}
+
+func sortKeyValues(kvs keyValues) keyValues {
+	sorted := keyValues{}
+	for _, kv := range kvs {
+		sorted = append(sorted, keyValue{kv.Key, kv.Value})
+	}
+
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Value > sorted[j].Value
+	})
+
+	return sorted
+}
+
 // SubReport represents a sub report of a Report
 type SubReport struct {
-	TotalCount     int            `json:"total_count"`
-	ProtocolCounts map[string]int `json:"protocol_counts"`
-	CountryCounts  map[string]int `json:"country_counts"`
+	TotalCount     int       `json:"total_count"`
+	ProtocolCounts keyValues `json:"protocol_counts"`
+	CountryCounts  keyValues `json:"country_counts"`
 }
 
 // Open database from given path
@@ -125,14 +170,16 @@ func (d *Database) SaveLocation(ip, location string) (id uint, err error) {
 func (d *Database) generateReport() (result Report, err error) {
 	result = Report{
 		Last7Days: SubReport{
-			ProtocolCounts: map[string]int{},
-			CountryCounts:  map[string]int{},
+			ProtocolCounts: keyValues{},
+			CountryCounts:  keyValues{},
 		},
 		Last30Days: SubReport{
-			ProtocolCounts: map[string]int{},
-			CountryCounts:  map[string]int{},
+			ProtocolCounts: keyValues{},
+			CountryCounts:  keyValues{},
 		},
 	}
+
+	var oldCount int
 
 	// last 7 days
 	var last7Days []BanActionLog
@@ -142,11 +189,13 @@ func (d *Database) generateReport() (result Report, err error) {
 
 		for _, log := range last7Days {
 			// counts for protocols
-			result.Last7Days.ProtocolCounts[log.Protocol] += 1
+			oldCount, _ = result.Last7Days.ProtocolCounts.Get(log.Protocol)
+			result.Last7Days.ProtocolCounts.Set(log.Protocol, oldCount+1)
 
 			// counts for countries
 			if log.Location != nil {
-				result.Last7Days.CountryCounts[*log.Location] += 1
+				oldCount, _ = result.Last7Days.CountryCounts.Get(*log.Location)
+				result.Last7Days.CountryCounts.Set(*log.Location, oldCount+1)
 			}
 		}
 	} else {
@@ -160,11 +209,13 @@ func (d *Database) generateReport() (result Report, err error) {
 
 		for _, log := range last30Days {
 			// counts for protocols
-			result.Last30Days.ProtocolCounts[log.Protocol] += 1
+			oldCount, _ = result.Last30Days.ProtocolCounts.Get(log.Protocol)
+			result.Last30Days.ProtocolCounts.Set(log.Protocol, oldCount+1)
 
 			// counts for countries
 			if log.Location != nil {
-				result.Last30Days.CountryCounts[*log.Location] += 1
+				oldCount, _ = result.Last30Days.CountryCounts.Get(*log.Location)
+				result.Last30Days.CountryCounts.Set(*log.Location, oldCount+1)
 			}
 		}
 	} else {
@@ -180,20 +231,20 @@ func (d *Database) GetReportAsPlain() (result []byte, err error) {
 	var report Report
 	if report, err = d.generateReport(); err == nil {
 		protocols7 := []string{}
-		for k, v := range report.Last7Days.ProtocolCounts {
-			protocols7 = append(protocols7, fmt.Sprintf("  %s: %d", k, v))
+		for _, kv := range sortKeyValues(report.Last7Days.ProtocolCounts) {
+			protocols7 = append(protocols7, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
 		countries7 := []string{}
-		for k, v := range report.Last7Days.CountryCounts {
-			countries7 = append(countries7, fmt.Sprintf("  %s: %d", k, v))
+		for _, kv := range sortKeyValues(report.Last7Days.CountryCounts) {
+			countries7 = append(countries7, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
 		protocols30 := []string{}
-		for k, v := range report.Last30Days.ProtocolCounts {
-			protocols30 = append(protocols30, fmt.Sprintf("  %s: %d", k, v))
+		for _, kv := range report.Last30Days.ProtocolCounts {
+			protocols30 = append(protocols30, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
 		countries30 := []string{}
-		for k, v := range report.Last30Days.CountryCounts {
-			countries30 = append(countries30, fmt.Sprintf("  %s: %d", k, v))
+		for _, kv := range report.Last30Days.CountryCounts {
+			countries30 = append(countries30, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
 
 		return []byte(fmt.Sprintf(`
@@ -258,21 +309,24 @@ func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string) (result []
 		hostname, _ := os.Hostname()
 
 		// generate report html
+		sort.Slice(report.Last7Days.ProtocolCounts, func(i, j int) bool {
+			return report.Last7Days.ProtocolCounts[i].Value > report.Last7Days.ProtocolCounts[j].Value
+		})
 		protocols7 := []string{}
-		for k, v := range report.Last7Days.ProtocolCounts {
-			protocols7 = append(protocols7, fmt.Sprintf("• %s: %d", k, v))
+		for _, kv := range sortKeyValues(report.Last7Days.ProtocolCounts) {
+			protocols7 = append(protocols7, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
 		countries7 := []string{}
-		for k, v := range report.Last7Days.CountryCounts {
-			countries7 = append(countries7, fmt.Sprintf("• %s: %d", k, v))
+		for _, kv := range sortKeyValues(report.Last7Days.CountryCounts) {
+			countries7 = append(countries7, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
 		protocols30 := []string{}
-		for k, v := range report.Last30Days.ProtocolCounts {
-			protocols30 = append(protocols30, fmt.Sprintf("• %s: %d", k, v))
+		for _, kv := range sortKeyValues(report.Last30Days.ProtocolCounts) {
+			protocols30 = append(protocols30, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
 		countries30 := []string{}
-		for k, v := range report.Last30Days.CountryCounts {
-			countries30 = append(countries30, fmt.Sprintf("• %s: %d", k, v))
+		for _, kv := range sortKeyValues(report.Last30Days.CountryCounts) {
+			countries30 = append(countries30, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
 
 		timestamp := time.Now().Format("2006-01-02 15:04:05")
