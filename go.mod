@@ -5,8 +5,8 @@ go 1.17
 require (
 	github.com/meinside/ipapi-go v0.0.1
 	github.com/meinside/telegraph-go v0.0.3
-	gorm.io/driver/sqlite v1.2.6
-	gorm.io/gorm v1.22.5
+	gorm.io/driver/sqlite v1.3.1
+	gorm.io/gorm v1.23.2
 )
 
 require (
