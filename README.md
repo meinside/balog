@@ -21,7 +21,7 @@ On the first run, it will create a default configuration file `~/.config/balog/c
 
 ```json
 {
-  "db_filepath": "/your/home/.config/database.db"
+  "db_filepath": "/your/home/.config/balog/database.db"
 }
 ```
 
