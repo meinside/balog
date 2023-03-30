@@ -3,6 +3,7 @@ package cmdline
 import (
 	"encoding/json"
 	"flag"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,9 +13,12 @@ import (
 )
 
 const (
-	defaultConfigDir      = ".config"
-	defaultConfigFilename = "balog.json"
-	defaultDBFilename     = "balog.db"
+	applicationName = "balog"
+
+	fallbackConfigDir = ".config/" + applicationName
+
+	defaultConfigFilename = "config.json"
+	defaultDBFilename     = "database.db"
 )
 
 const (
@@ -74,15 +78,15 @@ $ %[1]s -action report -format <format>
 # perform maintenance (job = list_unknown_ips, resolve_unknown_ips, purge_logs)
 $ %[1]s -action maintenance -job <job>
 
-# for loading config file from a location you want (default: ~/.config/balog.json)
+# for loading config file from a location you want (default: $XDG_CONFIG_HOME/%[2]s/%[3]s)
 $ %[1]s -config <config_filepath> ...
-`, os.Args[0])
+`, filepath.Base(os.Args[0]), applicationName, defaultConfigFilename)
 }
 
 // ProcessArgs processes command line arguments
 func ProcessArgs(args []string) {
 	// parse params
-	var confFilepath *string = flag.String(paramConfig, "", "Config filepath")
+	var configFilepath *string = flag.String(paramConfig, "", "Config filepath")
 	var action *string = flag.String(paramAction, "", "Action to perform")
 	var ip *string = flag.String(paramIP, "", "IP address of the ban action")
 	var protocol *string = flag.String(paramProtocol, "", "Protocol of the ban action")
@@ -90,14 +94,22 @@ func ProcessArgs(args []string) {
 	var job *string = flag.String(paramJob, "", "Maintenance job to perform")
 	flag.Parse()
 
-	if config, err := loadConfig(confFilepath); err == nil {
+	if config, err := loadConfig(configFilepath); err == nil {
 		if config.DBFilepath == nil {
-			homedir, _ := os.UserHomeDir()
-			fallbackDBFilepath := filepath.Join(homedir, defaultConfigDir, defaultDBFilename)
+			// https://xdgbasedirectoryspecification.com
+			configDir := os.Getenv("XDG_CONFIG_HOME")
 
-			util.Log("`db_filepath` is missing in config file, using default: '%s'", fallbackDBFilepath)
+			// If the value of the environment variable is unset, empty, or not an absolute path, use the default
+			if configDir == "" || configDir[0:1] != "/" {
+				homedir, _ := os.UserHomeDir()
+				fallbackDBFilepath := filepath.Join(homedir, fallbackConfigDir, defaultDBFilename)
 
-			config.DBFilepath = &fallbackDBFilepath
+				util.Log("`db_filepath` is missing in config file, using default: '%s'", fallbackDBFilepath)
+
+				config.DBFilepath = &fallbackDBFilepath
+			} else {
+				*config.DBFilepath = filepath.Join(configDir, applicationName, defaultDBFilename)
+			}
 		}
 
 		db, err := database.Open(*config.DBFilepath)
@@ -136,34 +148,48 @@ func checkArg(arg *string, expectedArg, action action) {
 
 // loadConfig loads config, if it doesn't exist, create it
 func loadConfig(customConfigFilepath *string) (cfg config, err error) {
-	var confFilepath string
+	var configFilepath string
 	if customConfigFilepath == nil || len(*customConfigFilepath) <= 0 {
-		var homedir string
-		homedir, err = os.UserHomeDir()
-		if err == nil {
-			confFilepath = filepath.Join(homedir, defaultConfigDir, defaultConfigFilename)
+		// https://xdgbasedirectoryspecification.com
+		configDir := os.Getenv("XDG_CONFIG_HOME")
+
+		// If the value of the environment variable is unset, empty, or not an absolute path, use the default
+		if configDir == "" || configDir[0:1] != "/" {
+			var homedir string
+			homedir, err = os.UserHomeDir()
+			if err == nil {
+				configFilepath = filepath.Join(homedir, fallbackConfigDir, defaultConfigFilename)
+			} else {
+				return cfg, err
+			}
 		} else {
-			return cfg, err
+			configFilepath = filepath.Join(configDir, applicationName, defaultConfigFilename)
 		}
 	} else {
-		confFilepath = *customConfigFilepath
+		configFilepath = *customConfigFilepath
 	}
 
-	if _, err = os.Stat(confFilepath); err == nil {
+	if _, err = os.Stat(configFilepath); err == nil {
 		// read config file
 		var bytes []byte
-		if bytes, err = os.ReadFile(confFilepath); err == nil {
+		if bytes, err = os.ReadFile(configFilepath); err == nil {
 			if err = json.Unmarshal(bytes, &cfg); err == nil {
 				return cfg, nil
 			}
 		}
 	} else if os.IsNotExist(err) {
+		// create a config directory recursively
+		configDirpath := filepath.Dir(configFilepath)
+		if err := os.MkdirAll(configDirpath, fs.ModePerm); err != nil {
+			util.Log("Failed to create config directory '%s': %s", configDirpath, err)
+		}
+
 		// create a default config file
 		var file *os.File
-		if file, err = os.Create(confFilepath); err == nil {
+		if file, err = os.Create(configFilepath); err == nil {
 			defer file.Close()
 
-			dbDirpath := filepath.Dir(confFilepath)
+			dbDirpath := filepath.Dir(configFilepath)
 			dbFilepath := filepath.Join(dbDirpath, defaultDBFilename)
 			cfg = config{
 				DBFilepath: &dbFilepath,
@@ -173,7 +199,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 			var bytes []byte
 			if bytes, err = json.Marshal(cfg); err == nil {
 				if _, err = file.Write(bytes); err == nil {
-					util.Log("Created default config file: '%s'", confFilepath)
+					util.Log("Created default config file: '%s'", configFilepath)
 				}
 				return cfg, nil
 			}
