@@ -17,11 +17,11 @@ $ go install github.com/meinside/balog@latest
 
 ```
 
-On the first run, it will create a default configuration file `~/.config/balog.json`:
+On the first run, it will create a default configuration file `~/.config/balog/config.json`:
 
 ```json
 {
-  "db_filepath": "/your/home/.config/balog.db"
+  "db_filepath": "/your/home/.config/database.db"
 }
 ```
 
