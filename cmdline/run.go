@@ -10,6 +10,8 @@ import (
 
 	"github.com/meinside/balog/database"
 	"github.com/meinside/balog/util"
+
+	"github.com/meinside/version-go"
 )
 
 const (
@@ -67,7 +69,7 @@ func init() {
 
 // ShowUsage prints usage
 func ShowUsage() {
-	util.LogAndExit(0, `Usage of %[1]s:
+	util.LogAndExit(0, `Usage of %[1]s %[4]s:
 
 # save a ban action
 $ %[1]s -action save -ip <ip> -protocol <name>
@@ -80,7 +82,7 @@ $ %[1]s -action maintenance -job <job>
 
 # for loading config file from a location you want (default: $XDG_CONFIG_HOME/%[2]s/%[3]s)
 $ %[1]s -config <config_filepath> ...
-`, filepath.Base(os.Args[0]), applicationName, defaultConfigFilename)
+`, filepath.Base(os.Args[0]), applicationName, defaultConfigFilename, version.Minimum())
 }
 
 // ProcessArgs processes command line arguments

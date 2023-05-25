@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/meinside/ipapi-go v0.0.1
 	github.com/meinside/telegraph-go v0.0.6
+	github.com/meinside/version-go v0.0.2
 	gorm.io/driver/sqlite v1.5.1
 	gorm.io/gorm v1.25.1
 )
