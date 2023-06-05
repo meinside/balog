@@ -6,7 +6,7 @@ A logger for [fail2ban](https://www.fail2ban.org/wiki/index.php/Main_Page)'s ban
 
 ## What does it do?
 
-Logs ban actions with ip addresses, and if possible, fetch their geolocations from [ipapi.co](https://ipapi.co/).
+Logs ban actions with ip addresses, and if possible, fetch their geolocations from [ipgeolocation.io](https://ipgeolocation.io/).
 
 Also generates reports in various formats, including: plain text, json, and [telegra.ph](https://telegra.ph/).
 
@@ -24,6 +24,31 @@ On the first run, it will create a default configuration file `~/.config/balog/c
   "db_filepath": "/your/home/.config/balog/database.db"
 }
 ```
+
+### Telegraph Access Token
+
+For posting reports to telegra.ph, set your telegraph access token like this:
+
+```json
+{
+  "db_filepath": "/path/to/database.db",
+  "telegraph_access_token": "1234567890abcdefghijklmnopqrstuvwxyz"
+}
+```
+
+### ipgeolocaiton.io API Key
+
+For fetching geolocations of banned IP addresses, set your [ipgeolocation.io](https://ipgeolocation.io/) API key like this:
+
+```json
+{
+  "db_filepath": "/path/to/database.db",
+  "telegraph_access_token": "1234567890abcdefghijklmnopqrstuvwxyz",
+  "ipgeolocation_api_key": "abcdefghijk1234567890"
+}
+```
+
+If `ipgeolocation_api_key` is not set, locations will be saved as `Unknown`.
 
 ## Usage
 
@@ -115,7 +140,7 @@ You can put the above commands in your crontab:
 # list unknown ips
 $ balog -action maintenance -job list_unknown_ips
 
-# resolve unknown ips through ipapi.co
+# resolve unknown ips through ipgeolocation.io
 $ balog -action maintenance -job resolve_unknown_ips
 
 # purge logs

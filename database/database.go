@@ -11,7 +11,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/meinside/ipapi-go"
+	"github.com/meinside/ipgeolocation.io-go"
 	"github.com/meinside/telegraph-go"
 
 	"github.com/meinside/balog/util"
@@ -402,13 +402,13 @@ func (d *Database) ListUnknownIPs() (result []Location, err error) {
 }
 
 // ResolveUnknownIPs lists unknown ips, tries resolving them, and then returns them
-func (d *Database) ResolveUnknownIPs() (result []Location, err error) {
+func (d *Database) ResolveUnknownIPs(geolocAPIKey *string) (result []Location, err error) {
 	result = []Location{}
 
 	locations, err := d.ListUnknownIPs()
 	if err == nil {
 		for _, loc := range locations {
-			location, err := FetchLocation(loc.IP)
+			location, err := FetchLocation(geolocAPIKey, loc.IP)
 			// FIXME: no error, but location is empty (eg. reserved ips like "127.0.0.1")
 			if err == nil && location != "" {
 				if err = d.UpdateLocation(loc.IP, location); err == nil {
@@ -430,11 +430,14 @@ func (d *Database) PurgeLogs() (result int64, err error) {
 	return res.RowsAffected, res.Error
 }
 
-// FetchLocation from ipapi.co
-func FetchLocation(ip string) (location string, err error) {
-	var result ipapi.Response
-	if result, err = ipapi.GetLocation(ip); err == nil {
-		return result.CountryName, nil
+// FetchLocation from ipgeolocation.io
+func FetchLocation(geolocAPIKey *string, ip string) (location string, err error) {
+	if geolocAPIKey != nil {
+		client := ipgeolocation.NewClient(*geolocAPIKey)
+		var result ipgeolocation.ResponseGeolocation
+		if result, err = client.GetGeolocation(ip); err == nil {
+			return result.CountryName, nil
+		}
 	}
 
 	return UnknownLocation, err

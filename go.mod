@@ -3,7 +3,7 @@ module github.com/meinside/balog
 go 1.20
 
 require (
-	github.com/meinside/ipapi-go v0.0.1
+	github.com/meinside/ipgeolocation.io-go v0.0.1
 	github.com/meinside/telegraph-go v0.0.6
 	github.com/meinside/version-go v0.0.2
 	gorm.io/driver/sqlite v1.5.1
