@@ -61,6 +61,7 @@ type config struct {
 	DBFilepath *string `json:"db_filepath,omitempty"`
 
 	TelegraphAccessToken *string `json:"telegraph_access_token,omitempty"`
+	IPGeolocationAPIKey  *string `json:"ipgeolocation_api_key,omitempty"`
 }
 
 func init() {
@@ -123,13 +124,13 @@ func ProcessArgs(args []string) {
 		case string(actionSave):
 			checkArg(ip, paramIP, actionSave)
 			checkArg(protocol, paramProtocol, actionSave)
-			processSave(db, protocol, ip)
+			processSave(db, protocol, ip, config.IPGeolocationAPIKey)
 		case string(actionReport):
 			checkArg(format, paramFormat, actionReport)
 			processReport(db, format, config.TelegraphAccessToken)
 		case string(actionMaintenance):
 			checkArg(job, paramJob, actionMaintenance)
-			processMaintenance(db, job)
+			processMaintenance(db, job, config.IPGeolocationAPIKey)
 		default:
 			util.Log("Unknown action was given: '%s'", *action)
 			ShowUsage()
@@ -210,7 +211,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 	return cfg, err
 }
 
-func processSave(db *database.Database, protocol, ip *string) {
+func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
 	// save,
 	if id, err := db.SaveBanAction(*protocol, *ip); err != nil {
 		util.LogAndExit(1, "Failed to save ban action: %s", err)
@@ -219,9 +220,9 @@ func processSave(db *database.Database, protocol, ip *string) {
 		if cached, err := db.LookupLocation(*ip); err == nil {
 			var fetched string
 			var err error
-			// if there is no cache for it, fetch it from ipapi.co,
+			// if there is no cache for it, fetch it from ipgeolocation.io,
 			if cached.ID == 0 {
-				fetched, err = database.FetchLocation(*ip)
+				fetched, err = database.FetchLocation(geolocAPIKey, *ip)
 				if err != nil {
 					util.Log("Failed to fetch location: %s", err)
 				}
@@ -272,7 +273,7 @@ func processReport(db *database.Database, format *string, telegraphAccessToken *
 	}
 }
 
-func processMaintenance(db *database.Database, job *string) {
+func processMaintenance(db *database.Database, job, geolocAPIKey *string) {
 	switch *job {
 	case string(maintenanceJobListUnknownIPs):
 		if ips, err := db.ListUnknownIPs(); err == nil {
@@ -287,7 +288,7 @@ func processMaintenance(db *database.Database, job *string) {
 			util.LogAndExit(1, "Failed to list unknown IPs: %s", err)
 		}
 	case string(maintenanceJobResolveUnknownIPs):
-		if ips, err := db.ResolveUnknownIPs(); err == nil {
+		if ips, err := db.ResolveUnknownIPs(geolocAPIKey); err == nil {
 			resolved := []database.Location{}
 			unresolved := []database.Location{}
 			for _, ip := range ips {
