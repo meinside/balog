@@ -2,14 +2,12 @@ package main
 
 import (
 	"os"
-
-	"github.com/meinside/balog/cmdline"
 )
 
 func main() {
 	if len(os.Args) <= 1 {
-		cmdline.ShowUsage()
+		showUsage()
 	} else {
-		cmdline.ProcessArgs(os.Args[1:])
+		run(os.Args[1:])
 	}
 }

@@ -1,4 +1,4 @@
-package cmdline
+package main
 
 import (
 	"encoding/json"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/meinside/balog/database"
 	"github.com/meinside/balog/util"
+	"github.com/meinside/infisical-go"
+	"github.com/meinside/infisical-go/helper"
 
 	"github.com/meinside/version-go"
 )
@@ -60,16 +62,27 @@ const (
 type config struct {
 	DBFilepath *string `json:"db_filepath,omitempty"`
 
+	// Telegraph and IPGeolocation tokens & keys
 	TelegraphAccessToken *string `json:"telegraph_access_token,omitempty"`
 	IPGeolocationAPIKey  *string `json:"ipgeolocation_api_key,omitempty"`
+
+	// or Infisical settings
+	Infisical *struct {
+		WorkspaceID                 string               `json:"workspace_id"`
+		Token                       string               `json:"token"`
+		Environment                 string               `json:"environment"`
+		SecretType                  infisical.SecretType `json:"secret_type"`
+		TelegraphAccessTokenKeyPath string               `json:"telegraph_access_token_key_path"`
+		IPGeolocationAPIKeyKeyPath  *string              `json:"ipgeolocation_api_key_key_path,omitempty"`
+	} `json:"infisical,omitempty"`
 }
 
 func init() {
-	flag.Usage = ShowUsage
+	flag.Usage = showUsage
 }
 
-// ShowUsage prints usage
-func ShowUsage() {
+// showUsage prints usage
+func showUsage() {
 	util.LogAndExit(0, `Usage of %[1]s %[4]s:
 
 # save a ban action
@@ -86,8 +99,8 @@ $ %[1]s -config <config_filepath> ...
 `, filepath.Base(os.Args[0]), applicationName, defaultConfigFilename, version.Minimum())
 }
 
-// ProcessArgs processes command line arguments
-func ProcessArgs(args []string) {
+// run processes command line arguments
+func run(args []string) {
 	// parse params
 	var configFilepath *string = flag.String(paramConfig, "", "Config filepath")
 	var action *string = flag.String(paramAction, "", "Action to perform")
@@ -133,7 +146,7 @@ func ProcessArgs(args []string) {
 			processMaintenance(db, job, config.IPGeolocationAPIKey)
 		default:
 			util.Log("Unknown action was given: '%s'", *action)
-			ShowUsage()
+			showUsage()
 		}
 
 	} else {
@@ -145,7 +158,7 @@ func ProcessArgs(args []string) {
 func checkArg(arg *string, expectedArg, action action) {
 	if len(*arg) <= 0 {
 		util.Log("Parameter `-%s` is required for action '%s'.", expectedArg, action)
-		ShowUsage()
+		showUsage()
 	}
 }
 
@@ -177,6 +190,39 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 		var bytes []byte
 		if bytes, err = os.ReadFile(configFilepath); err == nil {
 			if err = json.Unmarshal(bytes, &cfg); err == nil {
+				if cfg.TelegraphAccessToken == nil && cfg.Infisical != nil {
+					// read access token from infisical
+					var accessToken string
+					accessToken, err = helper.Value(
+						cfg.Infisical.WorkspaceID,
+						cfg.Infisical.Token,
+						cfg.Infisical.Environment,
+						cfg.Infisical.SecretType,
+						cfg.Infisical.TelegraphAccessTokenKeyPath,
+					)
+					cfg.TelegraphAccessToken = &accessToken
+
+					if err != nil {
+						return cfg, err
+					}
+				}
+				if cfg.IPGeolocationAPIKey == nil && cfg.Infisical != nil && cfg.Infisical.IPGeolocationAPIKeyKeyPath != nil {
+					// read api key from infisical
+					var apiKey string
+					apiKey, err = helper.Value(
+						cfg.Infisical.WorkspaceID,
+						cfg.Infisical.Token,
+						cfg.Infisical.Environment,
+						cfg.Infisical.SecretType,
+						*cfg.Infisical.IPGeolocationAPIKeyKeyPath,
+					)
+					cfg.IPGeolocationAPIKey = &apiKey
+
+					if err != nil {
+						return cfg, err
+					}
+				}
+
 				return cfg, nil
 			}
 		}
@@ -262,7 +308,7 @@ func processReport(db *database.Database, format *string, telegraphAccessToken *
 		bytes, err = db.GetReportAsTelegraph(telegraphAccessToken)
 	default:
 		util.Log("Unknown format was given: '%s'", *format)
-		ShowUsage()
+		showUsage()
 	}
 
 	if err != nil {
@@ -311,6 +357,6 @@ Still unresolved: %d`, len(resolved), len(unresolved))
 		}
 	default:
 		util.Log("Unknown job was given: '%s'", *job)
-		ShowUsage()
+		showUsage()
 	}
 }
