@@ -1,8 +1,9 @@
 module github.com/meinside/balog
 
-go 1.20
+go 1.21.0
 
 require (
+	github.com/meinside/infisical-go v0.0.9
 	github.com/meinside/ipgeolocation.io-go v0.0.1
 	github.com/meinside/telegraph-go v0.0.6
 	github.com/meinside/version-go v0.0.2
