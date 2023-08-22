@@ -3,12 +3,12 @@ module github.com/meinside/balog
 go 1.21.0
 
 require (
-	github.com/meinside/infisical-go v0.0.9
+	github.com/meinside/infisical-go v0.0.12
 	github.com/meinside/ipgeolocation.io-go v0.0.1
 	github.com/meinside/telegraph-go v0.0.6
 	github.com/meinside/version-go v0.0.2
-	gorm.io/driver/sqlite v1.5.1
-	gorm.io/gorm v1.25.1
+	gorm.io/driver/sqlite v1.5.3
+	gorm.io/gorm v1.25.4
 )
 
 require (
@@ -16,6 +16,6 @@ require (
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/mattn/go-sqlite3 v1.14.16 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.17 // indirect
+	golang.org/x/net v0.14.0 // indirect
 )
