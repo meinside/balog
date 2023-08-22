@@ -43,6 +43,7 @@ For fetching geolocations of banned IP addresses, set your [ipgeolocation.io](ht
 ```json
 {
   "db_filepath": "/path/to/database.db",
+
   "telegraph_access_token": "1234567890abcdefghijklmnopqrstuvwxyz",
   "ipgeolocation_api_key": "abcdefghijk1234567890"
 }
@@ -63,6 +64,28 @@ You can also use [Infisical](https://infisical.com/) for retrieving your access 
     "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
     "environment": "dev",
     "secret_type": "shared",
+
+    "telegraph_access_token_key_path": "/path/to/your/KEY_TO_TELEGRAPH_ACCESS_TOKEN",
+    "ipgeolocation_api_key_key_path": "/path/to/your/KEY_TO_IPGEOLOCATION_API_KEY"
+  }
+}
+```
+
+If your Infisical workspace's E2EE setting is enabled, you also need to provide your API key:
+
+```json
+{
+  "db_filepath": "/path/to/database.db",
+
+  "infisical": {
+    "e2ee": true,
+    "api_key": "ak.1234567890.abcdefghijk",
+
+    "workspace_id": "012345abcdefg",
+    "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
+    "environment": "dev",
+    "secret_type": "shared",
+
     "telegraph_access_token_key_path": "/path/to/your/KEY_TO_TELEGRAPH_ACCESS_TOKEN",
     "ipgeolocation_api_key_key_path": "/path/to/your/KEY_TO_IPGEOLOCATION_API_KEY"
   }

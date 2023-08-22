@@ -68,12 +68,17 @@ type config struct {
 
 	// or Infisical settings
 	Infisical *struct {
-		WorkspaceID                 string               `json:"workspace_id"`
-		Token                       string               `json:"token"`
-		Environment                 string               `json:"environment"`
-		SecretType                  infisical.SecretType `json:"secret_type"`
-		TelegraphAccessTokenKeyPath string               `json:"telegraph_access_token_key_path"`
-		IPGeolocationAPIKeyKeyPath  *string              `json:"ipgeolocation_api_key_key_path,omitempty"`
+		// NOTE: When the workspace's E2EE setting is enabled, APIKey is essential for decryption
+		E2EE   bool    `json:"e2ee,omitempty"`
+		APIKey *string `json:"api_key,omitempty"`
+
+		WorkspaceID string               `json:"workspace_id"`
+		Token       string               `json:"token"`
+		Environment string               `json:"environment"`
+		SecretType  infisical.SecretType `json:"secret_type"`
+
+		TelegraphAccessTokenKeyPath string  `json:"telegraph_access_token_key_path"`
+		IPGeolocationAPIKeyKeyPath  *string `json:"ipgeolocation_api_key_key_path,omitempty"`
 	} `json:"infisical,omitempty"`
 }
 
@@ -190,40 +195,56 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 		var bytes []byte
 		if bytes, err = os.ReadFile(configFilepath); err == nil {
 			if err = json.Unmarshal(bytes, &cfg); err == nil {
+				// read access token from infisical
 				if cfg.TelegraphAccessToken == nil && cfg.Infisical != nil {
-					// read access token from infisical
 					var accessToken string
-					accessToken, err = helper.Value(
-						cfg.Infisical.WorkspaceID,
-						cfg.Infisical.Token,
-						cfg.Infisical.Environment,
-						cfg.Infisical.SecretType,
-						cfg.Infisical.TelegraphAccessTokenKeyPath,
-					)
+
+					if cfg.Infisical.E2EE && cfg.Infisical.APIKey != nil {
+						accessToken, err = helper.E2EEValue(
+							*cfg.Infisical.APIKey,
+							cfg.Infisical.WorkspaceID,
+							cfg.Infisical.Token,
+							cfg.Infisical.Environment,
+							cfg.Infisical.SecretType,
+							cfg.Infisical.TelegraphAccessTokenKeyPath,
+						)
+					} else {
+						accessToken, err = helper.Value(
+							cfg.Infisical.WorkspaceID,
+							cfg.Infisical.Token,
+							cfg.Infisical.Environment,
+							cfg.Infisical.SecretType,
+							cfg.Infisical.TelegraphAccessTokenKeyPath,
+						)
+					}
 					cfg.TelegraphAccessToken = &accessToken
-
-					if err != nil {
-						return cfg, err
-					}
 				}
+				// read api key from infisical
 				if cfg.IPGeolocationAPIKey == nil && cfg.Infisical != nil && cfg.Infisical.IPGeolocationAPIKeyKeyPath != nil {
-					// read api key from infisical
 					var apiKey string
-					apiKey, err = helper.Value(
-						cfg.Infisical.WorkspaceID,
-						cfg.Infisical.Token,
-						cfg.Infisical.Environment,
-						cfg.Infisical.SecretType,
-						*cfg.Infisical.IPGeolocationAPIKeyKeyPath,
-					)
-					cfg.IPGeolocationAPIKey = &apiKey
 
-					if err != nil {
-						return cfg, err
+					if cfg.Infisical.E2EE && cfg.Infisical.APIKey != nil {
+						apiKey, err = helper.E2EEValue(
+							*cfg.Infisical.APIKey,
+							cfg.Infisical.WorkspaceID,
+							cfg.Infisical.Token,
+							cfg.Infisical.Environment,
+							cfg.Infisical.SecretType,
+							*cfg.Infisical.IPGeolocationAPIKeyKeyPath,
+						)
+					} else {
+						apiKey, err = helper.Value(
+							cfg.Infisical.WorkspaceID,
+							cfg.Infisical.Token,
+							cfg.Infisical.Environment,
+							cfg.Infisical.SecretType,
+							*cfg.Infisical.IPGeolocationAPIKeyKeyPath,
+						)
 					}
+					cfg.IPGeolocationAPIKey = &apiKey
 				}
 
-				return cfg, nil
+				return cfg, err
 			}
 		}
 	} else if os.IsNotExist(err) {
@@ -254,6 +275,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 			}
 		}
 	}
+
 	return cfg, err
 }
 
