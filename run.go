@@ -82,6 +82,78 @@ type config struct {
 	} `json:"infisical,omitempty"`
 }
 
+// get telegraph access token, retrieve it from infisicial if needed
+func (c *config) GetTelegraphAccessToken() *string {
+	// read access token from infisical
+	if c.TelegraphAccessToken == nil && c.Infisical != nil {
+		var accessToken string
+
+		var err error
+		if c.Infisical.E2EE && c.Infisical.APIKey != nil {
+			accessToken, err = helper.E2EEValue(
+				*c.Infisical.APIKey,
+				c.Infisical.WorkspaceID,
+				c.Infisical.Token,
+				c.Infisical.Environment,
+				c.Infisical.SecretType,
+				c.Infisical.TelegraphAccessTokenKeyPath,
+			)
+		} else {
+			accessToken, err = helper.Value(
+				c.Infisical.WorkspaceID,
+				c.Infisical.Token,
+				c.Infisical.Environment,
+				c.Infisical.SecretType,
+				c.Infisical.TelegraphAccessTokenKeyPath,
+			)
+		}
+
+		if err != nil {
+			util.Log("Failed to retrieve telegraph access token from infisical: %s", err)
+		}
+
+		c.TelegraphAccessToken = &accessToken
+	}
+
+	return c.TelegraphAccessToken
+}
+
+// get ipgeolocation api key, retrieve it from infisical if needed
+func (c *config) GetIPGeolocationAPIKey() *string {
+	// read api key from infisical
+	if c.IPGeolocationAPIKey == nil && c.Infisical != nil && c.Infisical.IPGeolocationAPIKeyKeyPath != nil {
+		var apiKey string
+
+		var err error
+		if c.Infisical.E2EE && c.Infisical.APIKey != nil {
+			apiKey, err = helper.E2EEValue(
+				*c.Infisical.APIKey,
+				c.Infisical.WorkspaceID,
+				c.Infisical.Token,
+				c.Infisical.Environment,
+				c.Infisical.SecretType,
+				*c.Infisical.IPGeolocationAPIKeyKeyPath,
+			)
+		} else {
+			apiKey, err = helper.Value(
+				c.Infisical.WorkspaceID,
+				c.Infisical.Token,
+				c.Infisical.Environment,
+				c.Infisical.SecretType,
+				*c.Infisical.IPGeolocationAPIKeyKeyPath,
+			)
+		}
+
+		if err != nil {
+			util.Log("Failed to retrieve ipgeolocation api key from infisical: %s", err)
+		}
+
+		c.IPGeolocationAPIKey = &apiKey
+	}
+
+	return c.IPGeolocationAPIKey
+}
+
 func init() {
 	flag.Usage = showUsage
 }
@@ -142,13 +214,13 @@ func run(args []string) {
 		case string(actionSave):
 			checkArg(ip, paramIP, actionSave)
 			checkArg(protocol, paramProtocol, actionSave)
-			processSave(db, protocol, ip, config.IPGeolocationAPIKey)
+			processSave(db, protocol, ip, config.GetIPGeolocationAPIKey())
 		case string(actionReport):
 			checkArg(format, paramFormat, actionReport)
-			processReport(db, format, config.TelegraphAccessToken)
+			processReport(db, format, config.GetTelegraphAccessToken())
 		case string(actionMaintenance):
 			checkArg(job, paramJob, actionMaintenance)
-			processMaintenance(db, job, config.IPGeolocationAPIKey)
+			processMaintenance(db, job, config.GetIPGeolocationAPIKey())
 		default:
 			util.Log("Unknown action was given: '%s'", *action)
 			showUsage()
@@ -195,55 +267,6 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 		var bytes []byte
 		if bytes, err = os.ReadFile(configFilepath); err == nil {
 			if err = json.Unmarshal(bytes, &cfg); err == nil {
-				// read access token from infisical
-				if cfg.TelegraphAccessToken == nil && cfg.Infisical != nil {
-					var accessToken string
-
-					if cfg.Infisical.E2EE && cfg.Infisical.APIKey != nil {
-						accessToken, err = helper.E2EEValue(
-							*cfg.Infisical.APIKey,
-							cfg.Infisical.WorkspaceID,
-							cfg.Infisical.Token,
-							cfg.Infisical.Environment,
-							cfg.Infisical.SecretType,
-							cfg.Infisical.TelegraphAccessTokenKeyPath,
-						)
-					} else {
-						accessToken, err = helper.Value(
-							cfg.Infisical.WorkspaceID,
-							cfg.Infisical.Token,
-							cfg.Infisical.Environment,
-							cfg.Infisical.SecretType,
-							cfg.Infisical.TelegraphAccessTokenKeyPath,
-						)
-					}
-					cfg.TelegraphAccessToken = &accessToken
-				}
-				// read api key from infisical
-				if cfg.IPGeolocationAPIKey == nil && cfg.Infisical != nil && cfg.Infisical.IPGeolocationAPIKeyKeyPath != nil {
-					var apiKey string
-
-					if cfg.Infisical.E2EE && cfg.Infisical.APIKey != nil {
-						apiKey, err = helper.E2EEValue(
-							*cfg.Infisical.APIKey,
-							cfg.Infisical.WorkspaceID,
-							cfg.Infisical.Token,
-							cfg.Infisical.Environment,
-							cfg.Infisical.SecretType,
-							*cfg.Infisical.IPGeolocationAPIKeyKeyPath,
-						)
-					} else {
-						apiKey, err = helper.Value(
-							cfg.Infisical.WorkspaceID,
-							cfg.Infisical.Token,
-							cfg.Infisical.Environment,
-							cfg.Infisical.SecretType,
-							*cfg.Infisical.IPGeolocationAPIKeyKeyPath,
-						)
-					}
-					cfg.IPGeolocationAPIKey = &apiKey
-				}
-
 				return cfg, err
 			}
 		}
