@@ -3,8 +3,8 @@ module github.com/meinside/balog
 go 1.21.0
 
 require (
-	github.com/meinside/infisical-go v0.0.18
-	github.com/meinside/ipgeolocation.io-go v0.0.1
+	github.com/meinside/infisical-go v0.1.0
+	github.com/meinside/ipgeolocation.io-go v0.0.2
 	github.com/meinside/telegraph-go v0.0.6
 	github.com/meinside/version-go v0.0.2
 	gorm.io/driver/sqlite v1.5.3
