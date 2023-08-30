@@ -11,8 +11,12 @@ github.com/mattn/go-sqlite3 v1.14.17 h1:mCRHCLDUBXgpKAqIKsaAaAsrAlbkeomtRFKXh2L6
 github.com/mattn/go-sqlite3 v1.14.17/go.mod h1:2eHXhiwb8IkHr+BDWZGa96P6+rkvnG63S2DGjv9HUNg=
 github.com/meinside/infisical-go v0.0.18 h1:7vTzMYJc6e1pKmgwrsfPfYFkGMjemNdg/6utwdgUxzc=
 github.com/meinside/infisical-go v0.0.18/go.mod h1:cfQHaBT5VIzQISkrmJj/AUkyxGMoTBy8ENNEL0TJ02E=
+github.com/meinside/infisical-go v0.1.0 h1:7oy175fSCjwHVIA8fTrTNQcjoxGRnzFsRS57OJhd39w=
+github.com/meinside/infisical-go v0.1.0/go.mod h1:cfQHaBT5VIzQISkrmJj/AUkyxGMoTBy8ENNEL0TJ02E=
 github.com/meinside/ipgeolocation.io-go v0.0.1 h1:REhHldFj2Crr4umXhpzXUDdm2S//SF4UoW03M6oI3v8=
 github.com/meinside/ipgeolocation.io-go v0.0.1/go.mod h1:3lDuvPVq8ltUReuCjL3pL5C4yu0gbiaRAPLyqoZRAJk=
+github.com/meinside/ipgeolocation.io-go v0.0.2 h1:AmnwNPoa5RS3MBFBJej2sTQaC2BbPlL14Gctos1l2X4=
+github.com/meinside/ipgeolocation.io-go v0.0.2/go.mod h1:3lDuvPVq8ltUReuCjL3pL5C4yu0gbiaRAPLyqoZRAJk=
 github.com/meinside/telegraph-go v0.0.6 h1:y5By1Uv9tvW281rVSparyPpVr47x3BHZ8yr+SzBKnmc=
 github.com/meinside/telegraph-go v0.0.6/go.mod h1:bf5CpAPk5cocM+aVnLYUqKJm/Hkca9EBqFgWSUcjucU=
 github.com/meinside/version-go v0.0.2 h1:No8xR94DxOhnrp49M/RSbQ/eWTt1GcncmrJdk1nHtiM=
