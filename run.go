@@ -12,6 +12,7 @@ import (
 	"github.com/meinside/balog/util"
 	"github.com/meinside/infisical-go"
 	"github.com/meinside/infisical-go/helper"
+	"github.com/tailscale/hujson"
 
 	"github.com/meinside/version-go"
 )
@@ -80,6 +81,17 @@ type config struct {
 		TelegraphAccessTokenKeyPath string  `json:"telegraph_access_token_key_path"`
 		IPGeolocationAPIKeyKeyPath  *string `json:"ipgeolocation_api_key_key_path,omitempty"`
 	} `json:"infisical,omitempty"`
+}
+
+// standardize given JSON (JWCC) bytes
+func standardizeJSON(b []byte) ([]byte, error) {
+	ast, err := hujson.Parse(b)
+	if err != nil {
+		return b, err
+	}
+	ast.Standardize()
+
+	return ast.Pack(), nil
 }
 
 // get telegraph access token, retrieve it from infisicial if needed
@@ -266,8 +278,10 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 		// read config file
 		var bytes []byte
 		if bytes, err = os.ReadFile(configFilepath); err == nil {
-			if err = json.Unmarshal(bytes, &cfg); err == nil {
-				return cfg, err
+			if bytes, err = standardizeJSON(bytes); err == nil {
+				if err = json.Unmarshal(bytes, &cfg); err == nil {
+					return cfg, err
+				}
 			}
 		}
 	} else if os.IsNotExist(err) {
