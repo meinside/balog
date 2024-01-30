@@ -3,6 +3,7 @@ package database
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/meinside/ipgeolocation.io-go"
 	"github.com/meinside/telegraph-go"
@@ -19,6 +21,8 @@ import (
 
 const (
 	UnknownLocation = "Unknown"
+
+	SlowQueryThresholdSeconds = 10
 )
 
 // BanActionLog represents a log of ban action
@@ -105,7 +109,18 @@ type SubReport struct {
 // Open database from given path
 func Open(path string) (result *Database, err error) {
 	var db *gorm.DB
-	if db, err = gorm.Open(sqlite.Open(path), &gorm.Config{}); err == nil {
+	if db, err = gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: logger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			logger.Config{
+				SlowThreshold:             SlowQueryThresholdSeconds * time.Second,
+				LogLevel:                  logger.Warn,
+				IgnoreRecordNotFoundError: true,
+				ParameterizedQueries:      true,
+				Colorful:                  false,
+			},
+		),
+	}); err == nil {
 		// migrate database
 		if err := db.AutoMigrate(&BanActionLog{}, &Location{}); err != nil {
 			util.Log("Failed to migrate database: %s", err)
