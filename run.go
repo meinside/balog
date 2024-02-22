@@ -69,12 +69,10 @@ type config struct {
 
 	// or Infisical settings
 	Infisical *struct {
-		// NOTE: When the workspace's E2EE setting is enabled, APIKey is essential for decryption
-		E2EE   bool    `json:"e2ee,omitempty"`
-		APIKey *string `json:"api_key,omitempty"`
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
 
 		WorkspaceID string               `json:"workspace_id"`
-		Token       string               `json:"token"`
 		Environment string               `json:"environment"`
 		SecretType  infisical.SecretType `json:"secret_type"`
 
@@ -101,24 +99,14 @@ func (c *config) GetTelegraphAccessToken() *string {
 		var accessToken string
 
 		var err error
-		if c.Infisical.E2EE && c.Infisical.APIKey != nil {
-			accessToken, err = helper.E2EEValue(
-				*c.Infisical.APIKey,
-				c.Infisical.WorkspaceID,
-				c.Infisical.Token,
-				c.Infisical.Environment,
-				c.Infisical.SecretType,
-				c.Infisical.TelegraphAccessTokenKeyPath,
-			)
-		} else {
-			accessToken, err = helper.Value(
-				c.Infisical.WorkspaceID,
-				c.Infisical.Token,
-				c.Infisical.Environment,
-				c.Infisical.SecretType,
-				c.Infisical.TelegraphAccessTokenKeyPath,
-			)
-		}
+		accessToken, err = helper.Value(
+			c.Infisical.ClientID,
+			c.Infisical.ClientSecret,
+			c.Infisical.WorkspaceID,
+			c.Infisical.Environment,
+			c.Infisical.SecretType,
+			c.Infisical.TelegraphAccessTokenKeyPath,
+		)
 
 		if err != nil {
 			util.Log("Failed to retrieve telegraph access token from infisical: %s", err)
@@ -137,24 +125,14 @@ func (c *config) GetIPGeolocationAPIKey() *string {
 		var apiKey string
 
 		var err error
-		if c.Infisical.E2EE && c.Infisical.APIKey != nil {
-			apiKey, err = helper.E2EEValue(
-				*c.Infisical.APIKey,
-				c.Infisical.WorkspaceID,
-				c.Infisical.Token,
-				c.Infisical.Environment,
-				c.Infisical.SecretType,
-				*c.Infisical.IPGeolocationAPIKeyKeyPath,
-			)
-		} else {
-			apiKey, err = helper.Value(
-				c.Infisical.WorkspaceID,
-				c.Infisical.Token,
-				c.Infisical.Environment,
-				c.Infisical.SecretType,
-				*c.Infisical.IPGeolocationAPIKeyKeyPath,
-			)
-		}
+		apiKey, err = helper.Value(
+			c.Infisical.ClientID,
+			c.Infisical.ClientSecret,
+			c.Infisical.WorkspaceID,
+			c.Infisical.Environment,
+			c.Infisical.SecretType,
+			*c.Infisical.IPGeolocationAPIKeyKeyPath,
+		)
 
 		if err != nil {
 			util.Log("Failed to retrieve ipgeolocation api key from infisical: %s", err)

@@ -60,29 +60,10 @@ You can also use [Infisical](https://infisical.com/) for retrieving your access 
   "db_filepath": "/path/to/database.db",
 
   "infisical": {
-    "workspace_id": "012345abcdefg",
-    "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
-    "environment": "dev",
-    "secret_type": "shared",
-
-    "telegraph_access_token_key_path": "/path/to/your/KEY_TO_TELEGRAPH_ACCESS_TOKEN",
-    "ipgeolocation_api_key_key_path": "/path/to/your/KEY_TO_IPGEOLOCATION_API_KEY"
-  }
-}
-```
-
-If your Infisical workspace's E2EE setting is enabled, you also need to provide your API key:
-
-```json
-{
-  "db_filepath": "/path/to/database.db",
-
-  "infisical": {
-    "e2ee": true,
-    "api_key": "ak.1234567890.abcdefghijk",
+    "client_id": "012345-abcdefg-987654321",
+    "client_secret": "aAbBcCdDeEfFgG0123456789xyzwXYZW",
 
     "workspace_id": "012345abcdefg",
-    "token": "st.xyzwabcd.0987654321.abcdefghijklmnop",
     "environment": "dev",
     "secret_type": "shared",
 
