@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/meinside/ipgeolocation.io-go"
-	"github.com/meinside/telegraph-go"
 
 	"github.com/meinside/balog/util"
 )
@@ -23,6 +22,8 @@ const (
 	UnknownLocation = "Unknown"
 
 	SlowQueryThresholdSeconds = 10
+
+	ProjectURL = "https://github.com/meinside/balog"
 )
 
 // BanActionLog represents a log of ban action
@@ -51,8 +52,9 @@ type Database struct {
 
 // Report represents a report of ban action logs
 type Report struct {
-	Last7Days  SubReport `json:"last_7_days"`
-	Last30Days SubReport `json:"last_30_days"`
+	ReferenceDatetime string    `json:"reference_datetime"`
+	Last7Days         SubReport `json:"last_7_days"`
+	Last30Days        SubReport `json:"last_30_days"`
 }
 
 type keyValue struct {
@@ -181,9 +183,12 @@ func (d *Database) SaveLocation(ip, location string) (id uint, err error) {
 	return loc.ID, res.Error
 }
 
-// generate report data
-func (d *Database) generateReport() (result Report, err error) {
+// generate report data (`offsetDays` in number of days; positive for future, negative for past)
+func (d *Database) generateReport(offsetDays int) (result Report, err error) {
+	timestamp := time.Now().AddDate(0, 0, offsetDays)
+
 	result = Report{
+		ReferenceDatetime: timestamp.Format("2006-01-02 15:04:05"),
 		Last7Days: SubReport{
 			ProtocolCounts: keyValues{},
 			CountryCounts:  keyValues{},
@@ -198,7 +203,7 @@ func (d *Database) generateReport() (result Report, err error) {
 
 	// last 7 days
 	var last7Days []BanActionLog
-	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, -7)).Find(&last7Days); res.Error == nil {
+	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, offsetDays-7)).Find(&last7Days); res.Error == nil {
 		// total count
 		result.Last7Days.TotalCount = len(last7Days)
 
@@ -219,7 +224,7 @@ func (d *Database) generateReport() (result Report, err error) {
 
 	// last 30 days
 	var last30Days []BanActionLog
-	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, -30)).Find(&last30Days); res.Error == nil {
+	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, offsetDays-30)).Find(&last30Days); res.Error == nil {
 		result.Last30Days.TotalCount = len(last30Days)
 
 		for _, log := range last30Days {
@@ -240,11 +245,11 @@ func (d *Database) generateReport() (result Report, err error) {
 	return result, err
 }
 
-// GetReportAsPlain generates report in plain text format
-func (d *Database) GetReportAsPlain() (result []byte, err error) {
+// GetReportAsPlain generates report in plain text format.
+func (d *Database) GetReportAsPlain(offsetDays int) (result []byte, err error) {
 	// generate report text
 	var report Report
-	if report, err = d.generateReport(); err == nil {
+	if report, err = d.generateReport(offsetDays); err == nil {
 		protocols7 := []string{}
 		for _, kv := range sortKeyValues(report.Last7Days.ProtocolCounts) {
 			protocols7 = append(protocols7, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
@@ -263,27 +268,30 @@ func (d *Database) GetReportAsPlain() (result []byte, err error) {
 		}
 
 		return []byte(fmt.Sprintf(`
+Reference datetime: %[1]s
+
 Last 7 days
 ---
-* Total: %d ban action(s)
+* Total: %[2]d ban action(s)
 
 * Protocols:
-%s
+%[3]s
 
 * Countries:
-%s
+%[4]s
 
 
 Last 30 days:
 ---
-* Total: %d ban action(s)
+* Total: %[5]d ban action(s)
 
 * Protocols:
-%s
+%[6]s
 
 * Countries:
-%s
+%[7]s
 `,
+			report.ReferenceDatetime,
 			report.Last7Days.TotalCount, strings.Join(protocols7, "\n"), strings.Join(countries7, "\n"),
 			report.Last30Days.TotalCount, strings.Join(protocols30, "\n"), strings.Join(countries30, "\n"),
 		)), nil
@@ -292,10 +300,10 @@ Last 30 days:
 	return []byte{}, err
 }
 
-// GetReportAsJSON generates report in json format
-func (d *Database) GetReportAsJSON() (result []byte, err error) {
+// GetReportAsJSON generates report in json format.
+func (d *Database) GetReportAsJSON(offsetDays int) (result []byte, err error) {
 	var report Report
-	if report, err = d.generateReport(); err == nil {
+	if report, err = d.generateReport(offsetDays); err == nil {
 		var bytes []byte
 		if bytes, err = json.Marshal(report); err == nil {
 			return bytes, nil
@@ -305,24 +313,10 @@ func (d *Database) GetReportAsJSON() (result []byte, err error) {
 	return []byte{}, err
 }
 
-// GetReportAsTelegraph generates report and post it to telegraph
-func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string) (result []byte, err error) {
+// GetReportAsTelegraph generates html report for posting to telegra.ph.
+func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string, offsetDays int) (result []byte, err error) {
 	var report Report
-	if report, err = d.generateReport(); err == nil {
-		var client *telegraph.Client
-
-		if telegraphAccessToken == nil {
-			client, err = telegraph.Create("balog", "Ban Action Logger", "")
-			if err == nil {
-				util.LogAndExit(0, "Add '%s' to your balog's configuration file with key `telegraph_access_token`", client.AccessToken)
-			} else {
-				util.LogAndExit(1, "Failed to create telegraph client: %s", err)
-			}
-		}
-
-		// get hostname
-		hostname, _ := os.Hostname()
-
+	if report, err = d.generateReport(offsetDays); err == nil {
 		// generate report html
 		sort.Slice(report.Last7Days.ProtocolCounts, func(i, j int) bool {
 			return report.Last7Days.ProtocolCounts[i].Value > report.Last7Days.ProtocolCounts[j].Value
@@ -344,79 +338,56 @@ func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string) (result []
 			countries30 = append(countries30, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
 
-		timestamp := time.Now().Format("2006-01-02 15:04:05")
-
 		html := fmt.Sprintf(
-			`<h4>Report: %s</h4>
+			`<h4>Report (reference datetime: %[1]s)</h4>
 
 <p>
 <h4>Last 7 days</h4>
 
-<strong>Total</strong> %d ban action(s)
+<strong>Total</strong> %[2]d ban action(s)
 
 <strong>Protocols</strong>
-%s
+%[3]s
 
 <strong>Countries</strong>
-%s
+%[4]s
 </p>
 <p>
 <h4>Last 30 days</h4>
 
-<strong>Total</strong> %d ban action(s)
+<strong>Total</strong> %[5]d ban action(s)
 
 <strong>Protocols</strong>
-%s
+%[6]s
 
 <strong>Countries</strong>
-%s
+%[7]s
 </p>
 
-generated by <a href="https://github.com/meinside/balog">balog</a>`,
-			timestamp,
+generated by <a href="%[8]s">balog</a>`,
+			report.ReferenceDatetime,
 			report.Last7Days.TotalCount, strings.Join(protocols7, "\n"), strings.Join(countries7, "\n"),
 			report.Last30Days.TotalCount, strings.Join(protocols30, "\n"), strings.Join(countries30, "\n"),
+			ProjectURL,
 		)
 
 		// debug log
 		//util.Log("Telegraph HTML: %s\n", html)
 
-		client, err = telegraph.Load(*telegraphAccessToken)
-		if err == nil {
-			var title string
-			if len(hostname) > 0 {
-				title = fmt.Sprintf("(%s) Balog Report: %s", hostname, timestamp)
-			} else {
-				title = fmt.Sprintf("Balog Report: %s", timestamp)
-			}
-
-			var post telegraph.Page
-			if post, err = client.CreatePageWithHTML(
-				title,
-				"balog",
-				"",
-				html,
-				//false,
-				true,
-			); err == nil {
-				return []byte(fmt.Sprintf("https://telegra.ph/%s", post.Path)), nil
-			}
-		} else {
-			util.LogAndExit(1, "Failed to load telegraph client: %s", err)
-		}
+		return []byte(html), err
 	}
 
 	return []byte{}, err
 }
 
-// ListUnknownIPs returns list of ips where their locations are unknown
+// ListUnknownIPs returns list of ips where their locations are unknown.
 func (d *Database) ListUnknownIPs() (result []Location, err error) {
 	res := d.db.Model(&Location{}).Where("country_name = ?", UnknownLocation).Find(&result)
 
 	return result, res.Error
 }
 
-// ResolveUnknownIPs lists unknown ips, tries resolving them, and then returns them
+// ResolveUnknownIPs lists unknown ips, tries resolving them, and then returns them.
 func (d *Database) ResolveUnknownIPs(geolocAPIKey *string) (result []Location, err error) {
 	result = []Location{}
 
@@ -438,14 +409,14 @@ func (d *Database) ResolveUnknownIPs(geolocAPIKey *string) (result []Location, e
 	return result, err
 }
 
-// PurgeLogs deletes all logs
+// PurgeLogs deletes all logs.
 func (d *Database) PurgeLogs() (result int64, err error) {
 	res := d.db.Delete(&BanActionLog{})
 
 	return res.RowsAffected, res.Error
 }
 
-// FetchLocation from ipgeolocation.io
+// FetchLocation fetches location from ipgeolocation.io.
 func FetchLocation(geolocAPIKey *string, ip string) (location string, err error) {
 	if geolocAPIKey != nil {
 		client := ipgeolocation.NewClient(*geolocAPIKey)

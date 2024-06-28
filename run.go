@@ -3,15 +3,18 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/meinside/balog/database"
 	"github.com/meinside/balog/util"
 	"github.com/meinside/infisical-go"
 	"github.com/meinside/infisical-go/helper"
+	"github.com/meinside/telegraph-go"
 	"github.com/tailscale/hujson"
 
 	"github.com/meinside/version-go"
@@ -167,7 +170,7 @@ $ %[1]s -config <config_filepath> ...
 }
 
 // run processes command line arguments
-func run(args []string) {
+func run(_ []string) {
 	// parse params
 	var configFilepath *string = flag.String(paramConfig, "", "Config filepath")
 	var action *string = flag.String(paramAction, "", "Action to perform")
@@ -207,7 +210,7 @@ func run(args []string) {
 			processSave(db, protocol, ip, config.GetIPGeolocationAPIKey())
 		case string(actionReport):
 			checkArg(format, paramFormat, actionReport)
-			processReport(db, format, config.GetTelegraphAccessToken())
+			processReport(db, format, config.GetTelegraphAccessToken(), 0)
 		case string(actionMaintenance):
 			checkArg(job, paramJob, actionMaintenance)
 			processMaintenance(db, job, config.GetIPGeolocationAPIKey())
@@ -294,6 +297,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 	return cfg, err
 }
 
+// process save job
 func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
 	// save,
 	if id, err := db.SaveBanAction(*protocol, *ip); err != nil {
@@ -332,17 +336,36 @@ func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
 	}
 }
 
-func processReport(db *database.Database, format *string, telegraphAccessToken *string) {
+// process report job
+func processReport(db *database.Database, format *string, telegraphAccessToken *string, offsetDays int) {
 	var err error
 	var bytes []byte
 
 	switch *format {
 	case string(reportFormatPlain):
-		bytes, err = db.GetReportAsPlain()
+		bytes, err = db.GetReportAsPlain(offsetDays)
 	case string(reportFormatJSON):
-		bytes, err = db.GetReportAsJSON()
+		bytes, err = db.GetReportAsJSON(offsetDays)
 	case string(reportFormatTelegraph):
-		bytes, err = db.GetReportAsTelegraph(telegraphAccessToken)
+		var client *telegraph.Client
+		if telegraphAccessToken == nil {
+			if client, err = telegraph.Create("balog", "Ban Action Logger", ""); err == nil { // NOTE: generate a new access token
+				util.LogAndExit(0, "Add '%s' to your balog's configuration file with key `telegraph_access_token`", client.AccessToken)
+			} else {
+				util.LogAndExit(1, "Failed to create telegraph client: %s", err)
+			}
+		} else {
+			if client, err = telegraph.Load(*telegraphAccessToken); err != nil {
+				util.LogAndExit(1, "Failed to load telegraph client: %s", err)
+			}
+		}
+
+		if bytes, err = db.GetReportAsTelegraph(telegraphAccessToken, offsetDays); err == nil {
+			var url string
+			if url, err = postToTelegraphAndReturnURL(client, bytes, offsetDays); err == nil {
+				bytes = []byte(url)
+			}
+		}
 	default:
 		util.Log("Unknown format was given: '%s'", *format)
 		showUsage()
@@ -356,6 +379,32 @@ func processReport(db *database.Database, format *string, telegraphAccessToken *
 	}
 }
 
+// post given html page to telegra.ph and return the generated URL
+func postToTelegraphAndReturnURL(client *telegraph.Client, bytes []byte, offsetDays int) (url string, err error) {
+	var title string
+	hostname, _ := os.Hostname()
+	timestamp := time.Now().AddDate(0, 0, -offsetDays).Format("2006-01-02 15:04:05")
+	if len(hostname) > 0 {
+		title = fmt.Sprintf("[%s] Balog Report: %s", hostname, timestamp)
+	} else {
+		title = fmt.Sprintf("Balog Report: %s", timestamp)
+	}
+
+	var post telegraph.Page
+	if post, err = client.CreatePageWithHTML(
+		title,
+		fmt.Sprintf("balog (%s)", hostname),
+		database.ProjectURL,
+		string(bytes),
+		true,
+	); err == nil {
+		return fmt.Sprintf("https://telegra.ph/%s", post.Path), nil
+	}
+
+	return "", err
+}
+
+// process maintenance job
 func processMaintenance(db *database.Database, job, geolocAPIKey *string) {
 	switch *job {
 	case string(maintenanceJobListUnknownIPs):
