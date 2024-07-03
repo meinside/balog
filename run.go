@@ -1,3 +1,5 @@
+// run.go
+
 package main
 
 import (
@@ -23,9 +25,6 @@ import (
 	"github.com/meinside/infisical-go/helper"
 	"github.com/meinside/telegraph-go"
 	"github.com/meinside/version-go"
-
-	"github.com/meinside/balog/database"
-	"github.com/meinside/balog/util"
 )
 
 const (
@@ -136,7 +135,7 @@ func (c *config) GetTelegraphAccessToken() *string {
 		)
 
 		if err != nil {
-			util.Log("Failed to retrieve telegraph access token from infisical: %s", err)
+			l("Failed to retrieve telegraph access token from infisical: %s", err)
 		}
 
 		c.TelegraphAccessToken = &accessToken
@@ -162,7 +161,7 @@ func (c *config) GetIPGeolocationAPIKey() *string {
 		)
 
 		if err != nil {
-			util.Log("Failed to retrieve ipgeolocation api key from infisical: %s", err)
+			l("Failed to retrieve ipgeolocation api key from infisical: %s", err)
 		}
 
 		c.IPGeolocationAPIKey = &apiKey
@@ -188,7 +187,7 @@ func (c *config) GetGoogleAIAPIKey() *string {
 		)
 
 		if err != nil {
-			util.Log("Failed to retrieve google ai api key from infisical: %s", err)
+			l("Failed to retrieve google ai api key from infisical: %s", err)
 		}
 
 		c.GoogleAIAPIKey = &apiKey
@@ -203,7 +202,7 @@ func init() {
 
 // showUsage prints usage
 func showUsage() {
-	util.LogAndExit(0, `Usage of %[1]s %[4]s:
+	lexit(0, `Usage of %[1]s %[4]s:
 
 # save a ban action
 $ %[1]s -action save -ip <ip> -protocol <name>
@@ -240,7 +239,7 @@ func run(_ []string) {
 				homedir, _ := os.UserHomeDir()
 				fallbackDBFilepath := filepath.Join(homedir, fallbackConfigDir, defaultDBFilename)
 
-				util.Log("`db_filepath` is missing in config file, using default: '%s'", fallbackDBFilepath)
+				l("`db_filepath` is missing in config file, using default: '%s'", fallbackDBFilepath)
 
 				config.DBFilepath = &fallbackDBFilepath
 			} else {
@@ -248,9 +247,9 @@ func run(_ []string) {
 			}
 		}
 
-		db, err := database.Open(*config.DBFilepath)
+		db, err := OpenDB(*config.DBFilepath)
 		if err != nil {
-			util.LogAndExit(1, "Failed to open database: %s", err)
+			lexit(1, "Failed to open database: %s", err)
 		}
 
 		switch *action {
@@ -265,19 +264,19 @@ func run(_ []string) {
 			checkArg(job, paramJob, actionMaintenance)
 			processMaintenance(db, job, config.GetIPGeolocationAPIKey())
 		default:
-			util.Log("Unknown action was given: '%s'", *action)
+			l("Unknown action was given: '%s'", *action)
 			showUsage()
 		}
 
 	} else {
-		util.LogAndExit(1, "Failed to load config: %s", err)
+		lexit(1, "Failed to load config: %s", err)
 	}
 }
 
 // check argument's existence and exit program if it's missing
 func checkArg(arg *string, expectedArg, action action) {
 	if len(*arg) <= 0 {
-		util.Log("Parameter `-%s` is required for action '%s'.", expectedArg, action)
+		l("Parameter `-%s` is required for action '%s'.", expectedArg, action)
 		showUsage()
 	}
 }
@@ -319,7 +318,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 		// create a config directory recursively
 		configDirpath := filepath.Dir(configFilepath)
 		if err := os.MkdirAll(configDirpath, fs.ModePerm); err != nil {
-			util.Log("Failed to create config directory '%s': %s", configDirpath, err)
+			l("Failed to create config directory '%s': %s", configDirpath, err)
 		}
 
 		// create a default config file
@@ -337,7 +336,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 			var bytes []byte
 			if bytes, err = json.Marshal(cfg); err == nil {
 				if _, err = file.Write(bytes); err == nil {
-					util.Log("Created default config file: '%s'", configFilepath)
+					l("Created default config file: '%s'", configFilepath)
 				}
 				return cfg, nil
 			}
@@ -348,10 +347,10 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 }
 
 // process save job
-func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
+func processSave(db *Database, protocol, ip, geolocAPIKey *string) {
 	// save,
 	if id, err := db.SaveBanAction(*protocol, *ip); err != nil {
-		util.LogAndExit(1, "Failed to save ban action: %s", err)
+		lexit(1, "Failed to save ban action: %s", err)
 	} else {
 		// then resolve its geo location
 		if cached, err := db.LookupLocation(*ip); err == nil {
@@ -359,18 +358,18 @@ func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
 			var err error
 			// if there is no cache for it, fetch it from ipgeolocation.io,
 			if cached.ID == 0 {
-				fetched, err = database.FetchLocation(geolocAPIKey, *ip)
+				fetched, err = FetchLocation(geolocAPIKey, *ip)
 				if err != nil {
-					util.Log("Failed to fetch location: %s", err)
+					l("Failed to fetch location: %s", err)
 				}
 
 				if fetched == "" {
-					fetched = database.UnknownLocation
+					fetched = unknownLocation
 				}
 
 				// and save to cache
 				if _, err = db.SaveLocation(*ip, fetched); err != nil {
-					util.Log("Failed to save location for '%s': %s", *ip, err)
+					l("Failed to save location for '%s': %s", *ip, err)
 				}
 			} else {
 				fetched = cached.CountryName
@@ -378,16 +377,16 @@ func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
 
 			// and update the ban action's location
 			if err = db.UpdateBanActionLocation(id, fetched); err != nil {
-				util.Log("Failed to update location of ban action '%d': %s", id, err)
+				l("Failed to update location of ban action '%d': %s", id, err)
 			}
 		} else {
-			util.Log("Failed to lookup location of '%s': %s", *ip, err)
+			l("Failed to lookup location of '%s': %s", *ip, err)
 		}
 	}
 }
 
 // process report job
-func processReport(db *database.Database, format *string, telegraphAccessToken, googleAIAPIKey *string, offsetDays int) {
+func processReport(db *Database, format *string, telegraphAccessToken, googleAIAPIKey *string, offsetDays int) {
 	var err error
 	var recent, older, insight, report []byte
 
@@ -399,7 +398,7 @@ func processReport(db *database.Database, format *string, telegraphAccessToken, 
 		if googleAIAPIKey != nil {
 			if older, _ = db.GetReportAsPlain(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
 				if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
-					util.Log("Failed to generate insights: %s", err)
+					l("Failed to generate insights: %s", err)
 				}
 			}
 		}
@@ -413,7 +412,7 @@ func processReport(db *database.Database, format *string, telegraphAccessToken, 
 		if googleAIAPIKey != nil {
 			if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
 				if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
-					util.Log("Failed to generate insights: %s", err)
+					l("Failed to generate insights: %s", err)
 				}
 			}
 		}
@@ -424,13 +423,13 @@ func processReport(db *database.Database, format *string, telegraphAccessToken, 
 		var client *telegraph.Client
 		if telegraphAccessToken == nil {
 			if client, err = telegraph.Create("balog", "Ban Action Logger", ""); err == nil { // NOTE: generate a new access token
-				util.LogAndExit(0, "Add '%s' to your balog's configuration file with key `telegraph_access_token`", client.AccessToken)
+				lexit(0, "Add '%s' to your balog's configuration file with key `telegraph_access_token`", client.AccessToken)
 			} else {
-				util.LogAndExit(1, "Failed to create telegraph client: %s", err)
+				lexit(1, "Failed to create telegraph client: %s", err)
 			}
 		} else {
 			if client, err = telegraph.Load(*telegraphAccessToken); err != nil {
-				util.LogAndExit(1, "Failed to load telegraph client: %s", err)
+				lexit(1, "Failed to load telegraph client: %s", err)
 			}
 		}
 
@@ -439,7 +438,7 @@ func processReport(db *database.Database, format *string, telegraphAccessToken, 
 			if googleAIAPIKey != nil {
 				if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
 					if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
-						util.Log("Failed to generate insights: %s", err)
+						l("Failed to generate insights: %s", err)
 					}
 				}
 			}
@@ -453,12 +452,12 @@ func processReport(db *database.Database, format *string, telegraphAccessToken, 
 			}
 		}
 	default:
-		util.Log("Unknown format was given: '%s'", *format)
+		l("Unknown format was given: '%s'", *format)
 		showUsage()
 	}
 
 	if err != nil {
-		util.LogAndExit(1, "Failed to generate report: %s", err)
+		lexit(1, "Failed to generate report: %s", err)
 	} else {
 		os.Stdout.Write(report)
 		os.Stdout.Write([]byte("\n"))
@@ -480,7 +479,7 @@ func postToTelegraphAndReturnURL(client *telegraph.Client, bytes []byte, offsetD
 	if post, err = client.CreatePageWithHTML(
 		title,
 		fmt.Sprintf("balog (%s)", hostname),
-		database.ProjectURL,
+		projectURL,
 		string(bytes),
 		true,
 	); err == nil {
@@ -491,7 +490,7 @@ func postToTelegraphAndReturnURL(client *telegraph.Client, bytes []byte, offsetD
 }
 
 // process maintenance job
-func processMaintenance(db *database.Database, job, geolocAPIKey *string) {
+func processMaintenance(db *Database, job, geolocAPIKey *string) {
 	switch *job {
 	case string(maintenanceJobListUnknownIPs):
 		if ips, err := db.ListUnknownIPs(); err == nil {
@@ -499,36 +498,36 @@ func processMaintenance(db *database.Database, job, geolocAPIKey *string) {
 			for _, ip := range ips {
 				unknowns = append(unknowns, ip.IP)
 			}
-			util.LogAndExit(0, `Unknown IPs:
+			lexit(0, `Unknown IPs:
 
 %s`, strings.Join(unknowns, "\n"))
 		} else {
-			util.LogAndExit(1, "Failed to list unknown IPs: %s", err)
+			lexit(1, "Failed to list unknown IPs: %s", err)
 		}
 	case string(maintenanceJobResolveUnknownIPs):
 		if ips, err := db.ResolveUnknownIPs(geolocAPIKey); err == nil {
-			resolved := []database.Location{}
-			unresolved := []database.Location{}
+			resolved := []Location{}
+			unresolved := []Location{}
 			for _, ip := range ips {
-				if ip.CountryName != database.UnknownLocation {
+				if ip.CountryName != unknownLocation {
 					resolved = append(resolved, ip)
 				} else {
 					unresolved = append(unresolved, ip)
 				}
 			}
-			util.LogAndExit(0, `Newly resolved IPs: %d 
+			lexit(0, `Newly resolved IPs: %d 
 Still unresolved: %d`, len(resolved), len(unresolved))
 		} else {
-			util.LogAndExit(1, "Failed to resolve unknown IPs: %s", err)
+			lexit(1, "Failed to resolve unknown IPs: %s", err)
 		}
 	case string(maintenanceJobPurgeLogs):
 		if numPurged, err := db.PurgeLogs(); err == nil {
-			util.LogAndExit(0, "Purged %d logs.", numPurged)
+			lexit(0, "Purged %d logs.", numPurged)
 		} else {
-			util.LogAndExit(1, "Failed to purge logs: %s", err)
+			lexit(1, "Failed to purge logs: %s", err)
 		}
 	default:
-		util.Log("Unknown job was given: '%s'", *job)
+		l("Unknown job was given: '%s'", *job)
 		showUsage()
 	}
 }
@@ -541,7 +540,7 @@ func generateInsight(googleAIAPIKey *string, olderReport, recentReport []byte) (
 
 	var client *genai.Client
 	if client, err = genai.NewClient(ctx, option.WithAPIKey(*googleAIAPIKey)); err == nil {
-		model := client.GenerativeModel(database.GoogleAIModel)
+		model := client.GenerativeModel(googleAIModel)
 
 		// set system instruction
 		model.SystemInstruction = &genai.Content{
