@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,14 +11,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/meinside/balog/database"
-	"github.com/meinside/balog/util"
+	// google ai
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
+
+	// hujson
+	"github.com/tailscale/hujson"
+
+	// my libraries
 	"github.com/meinside/infisical-go"
 	"github.com/meinside/infisical-go/helper"
 	"github.com/meinside/telegraph-go"
-	"github.com/tailscale/hujson"
-
 	"github.com/meinside/version-go"
+
+	"github.com/meinside/balog/database"
+	"github.com/meinside/balog/util"
 )
 
 const (
@@ -27,8 +35,18 @@ const (
 
 	defaultConfigFilename = "config.json"
 	defaultDBFilename     = "database.db"
+
+	// number of days for reporting
+	numDaysForReport1           = 7  // last 7 days
+	numDaysForReport2           = 30 // last 30 days
+	numDaysBeforeForOlderReport = 7  // older report = 7 days before
 )
 
+const (
+	systemInstructionForInsightGeneration = `You are a chatbot which analyzes fail2ban ban action logs and IP-based geolocation data to generate insights for the user. Offer system or security insights based on the analysis. Highlight and explain any unusual patterns or noteworthy findings. Your response must be in plain text, so do not try to emphasize words with markdown characters.`
+)
+
+// param names
 const (
 	paramConfig   = "config"
 	paramAction   = "action"
@@ -40,6 +58,7 @@ const (
 
 type action string
 
+// action names
 const (
 	actionSave        action = "save"
 	actionReport      action = "report"
@@ -48,6 +67,7 @@ const (
 
 type reportFormat string
 
+// report formats
 const (
 	reportFormatPlain     reportFormat = "plain"
 	reportFormatJSON      reportFormat = "json"
@@ -56,19 +76,21 @@ const (
 
 type maintenanceJob string
 
+// maintenance jobs
 const (
 	maintenanceJobListUnknownIPs    maintenanceJob = "list_unknown_ips"
 	maintenanceJobResolveUnknownIPs maintenanceJob = "resolve_unknown_ips"
 	maintenanceJobPurgeLogs         maintenanceJob = "purge_logs"
 )
 
-// config
+// config struct
 type config struct {
 	DBFilepath *string `json:"db_filepath,omitempty"`
 
-	// Telegraph and IPGeolocation tokens & keys
+	// API tokens and keys
 	TelegraphAccessToken *string `json:"telegraph_access_token,omitempty"`
 	IPGeolocationAPIKey  *string `json:"ipgeolocation_api_key,omitempty"`
+	GoogleAIAPIKey       *string `json:"google_ai_api_key,omitempty"`
 
 	// or Infisical settings
 	Infisical *struct {
@@ -79,8 +101,10 @@ type config struct {
 		Environment string               `json:"environment"`
 		SecretType  infisical.SecretType `json:"secret_type"`
 
+		// Infisical key paths of API tokens and keys
 		TelegraphAccessTokenKeyPath string  `json:"telegraph_access_token_key_path"`
 		IPGeolocationAPIKeyKeyPath  *string `json:"ipgeolocation_api_key_key_path,omitempty"`
+		GoogleAIAPIKeyKeyPath       *string `json:"google_ai_api_key_key_path,omitempty"`
 	} `json:"infisical,omitempty"`
 }
 
@@ -147,6 +171,32 @@ func (c *config) GetIPGeolocationAPIKey() *string {
 	return c.IPGeolocationAPIKey
 }
 
+// get google ai api key, retrieve it from infisical if needed
+func (c *config) GetGoogleAIAPIKey() *string {
+	// read api key from infisical
+	if c.GoogleAIAPIKey == nil && c.Infisical != nil && c.Infisical.GoogleAIAPIKeyKeyPath != nil {
+		var apiKey string
+
+		var err error
+		apiKey, err = helper.Value(
+			c.Infisical.ClientID,
+			c.Infisical.ClientSecret,
+			c.Infisical.WorkspaceID,
+			c.Infisical.Environment,
+			c.Infisical.SecretType,
+			*c.Infisical.GoogleAIAPIKeyKeyPath,
+		)
+
+		if err != nil {
+			util.Log("Failed to retrieve google ai api key from infisical: %s", err)
+		}
+
+		c.GoogleAIAPIKey = &apiKey
+	}
+
+	return c.GoogleAIAPIKey
+}
+
 func init() {
 	flag.Usage = showUsage
 }
@@ -210,7 +260,7 @@ func run(_ []string) {
 			processSave(db, protocol, ip, config.GetIPGeolocationAPIKey())
 		case string(actionReport):
 			checkArg(format, paramFormat, actionReport)
-			processReport(db, format, config.GetTelegraphAccessToken(), 0)
+			processReport(db, format, config.GetTelegraphAccessToken(), config.GetGoogleAIAPIKey(), 0)
 		case string(actionMaintenance):
 			checkArg(job, paramJob, actionMaintenance)
 			processMaintenance(db, job, config.GetIPGeolocationAPIKey())
@@ -337,15 +387,39 @@ func processSave(db *database.Database, protocol, ip, geolocAPIKey *string) {
 }
 
 // process report job
-func processReport(db *database.Database, format *string, telegraphAccessToken *string, offsetDays int) {
+func processReport(db *database.Database, format *string, telegraphAccessToken, googleAIAPIKey *string, offsetDays int) {
 	var err error
-	var bytes []byte
+	var recent, older, insight, report []byte
 
 	switch *format {
 	case string(reportFormatPlain):
-		bytes, err = db.GetReportAsPlain(offsetDays)
+		recent, err = db.GetReportAsPlain(offsetDays, numDaysForReport1, numDaysForReport2)
+
+		// generate some insights from older/recent reports with google ai model
+		if googleAIAPIKey != nil {
+			if older, _ = db.GetReportAsPlain(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
+				if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
+					util.Log("Failed to generate insights: %s", err)
+				}
+			}
+		}
+
+		// final report
+		report = db.GetFinalReportAsPlain(recent, insight)
 	case string(reportFormatJSON):
-		bytes, err = db.GetReportAsJSON(offsetDays)
+		recent, err = db.GetReportAsJSON(offsetDays, numDaysForReport1, numDaysForReport2)
+
+		// generate some insights from older/recent reports with google ai model
+		if googleAIAPIKey != nil {
+			if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
+				if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
+					util.Log("Failed to generate insights: %s", err)
+				}
+			}
+		}
+
+		// final report
+		report = db.GetFinalReportAsJSON(recent, insight)
 	case string(reportFormatTelegraph):
 		var client *telegraph.Client
 		if telegraphAccessToken == nil {
@@ -360,10 +434,22 @@ func processReport(db *database.Database, format *string, telegraphAccessToken *
 			}
 		}
 
-		if bytes, err = db.GetReportAsTelegraph(telegraphAccessToken, offsetDays); err == nil {
+		if recent, err = db.GetReportAsTelegraph(telegraphAccessToken, offsetDays, numDaysForReport1, numDaysForReport2); err == nil {
+			// generate some insights from older/recent reports with google ai model
+			if googleAIAPIKey != nil {
+				if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
+					if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
+						util.Log("Failed to generate insights: %s", err)
+					}
+				}
+			}
+
+			// final report
+			report = db.GetFinalReportAsTelegraph(recent, insight)
+
 			var url string
-			if url, err = postToTelegraphAndReturnURL(client, bytes, offsetDays); err == nil {
-				bytes = []byte(url)
+			if url, err = postToTelegraphAndReturnURL(client, report, offsetDays); err == nil {
+				report = []byte(url)
 			}
 		}
 	default:
@@ -374,7 +460,7 @@ func processReport(db *database.Database, format *string, telegraphAccessToken *
 	if err != nil {
 		util.LogAndExit(1, "Failed to generate report: %s", err)
 	} else {
-		os.Stdout.Write(bytes)
+		os.Stdout.Write(report)
 		os.Stdout.Write([]byte("\n"))
 	}
 }
@@ -445,4 +531,67 @@ Still unresolved: %d`, len(resolved), len(unresolved))
 		util.Log("Unknown job was given: '%s'", *job)
 		showUsage()
 	}
+}
+
+// generate insights with google api model
+func generateInsight(googleAIAPIKey *string, olderReport, recentReport []byte) (insight []byte, err error) {
+	generated := ""
+
+	ctx := context.TODO()
+
+	var client *genai.Client
+	if client, err = genai.NewClient(ctx, option.WithAPIKey(*googleAIAPIKey)); err == nil {
+		model := client.GenerativeModel(database.GoogleAIModel)
+
+		// set system instruction
+		model.SystemInstruction = &genai.Content{
+			Role: "model",
+			Parts: []genai.Part{
+				genai.Text(systemInstructionForInsightGeneration),
+			},
+		}
+
+		prompt := fmt.Sprintf(`Following are summarized reports of ban action logs and the geolocations of the logs.
+Analyze these reports and offer system or security insights based on the analysis.
+Highlight and explain any unusual patterns or noteworthy findings.
+
+<older_report>
+%[1]s
+</older_report>
+
+<recent_report>
+%[2]s
+</recent_report>`, string(olderReport), string(recentReport))
+
+		session := model.StartChat()
+		session.History = []*genai.Content{}
+
+		// set prompt
+		parts := []genai.Part{
+			genai.Text(prompt),
+		}
+
+		var res *genai.GenerateContentResponse
+		if res, err = session.SendMessage(ctx, parts...); err == nil {
+			if len(res.Candidates) > 0 {
+				parts := res.Candidates[0].Content.Parts
+
+				for _, part := range parts {
+					if text, ok := part.(genai.Text); ok {
+						generated += string(text) + "\n"
+					} else if data, ok := part.(genai.Blob); ok {
+						generated += fmt.Sprintf("%d byte(s) of %s\n", len(data.Data), data.MIMEType)
+					} else {
+						err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
+					}
+				}
+			} else {
+				err = fmt.Errorf("no candidate returned from Gemini API")
+			}
+		}
+	}
+
+	defer client.Close()
+
+	return []byte(generated), err
 }

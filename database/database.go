@@ -24,6 +24,8 @@ const (
 	SlowQueryThresholdSeconds = 10
 
 	ProjectURL = "https://github.com/meinside/balog"
+
+	GoogleAIModel = "gemini-1.5-pro-latest"
 )
 
 // BanActionLog represents a log of ban action
@@ -53,8 +55,10 @@ type Database struct {
 // Report represents a report of ban action logs
 type Report struct {
 	ReferenceDatetime string    `json:"reference_datetime"`
-	Last7Days         SubReport `json:"last_7_days"`
-	Last30Days        SubReport `json:"last_30_days"`
+	LastDaysReport1   SubReport `json:"last_days_report1"`
+	LastDaysReport2   SubReport `json:"last_days_report2"`
+
+	Insight *string `json:"insight,omitempty"`
 }
 
 type keyValue struct {
@@ -184,16 +188,16 @@ func (d *Database) SaveLocation(ip, location string) (id uint, err error) {
 }
 
 // generate report data (`offsetDays` in number of days; positive for future, negative for past)
-func (d *Database) generateReport(offsetDays int) (result Report, err error) {
+func (d *Database) generateReport(offsetDays, numDaysForReport1, numDaysForReport2 int) (result Report, err error) {
 	timestamp := time.Now().AddDate(0, 0, offsetDays)
 
 	result = Report{
 		ReferenceDatetime: timestamp.Format("2006-01-02 15:04:05"),
-		Last7Days: SubReport{
+		LastDaysReport1: SubReport{
 			ProtocolCounts: keyValues{},
 			CountryCounts:  keyValues{},
 		},
-		Last30Days: SubReport{
+		LastDaysReport2: SubReport{
 			ProtocolCounts: keyValues{},
 			CountryCounts:  keyValues{},
 		},
@@ -201,41 +205,41 @@ func (d *Database) generateReport(offsetDays int) (result Report, err error) {
 
 	var oldCount int
 
-	// last 7 days
-	var last7Days []BanActionLog
-	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, offsetDays-7)).Find(&last7Days); res.Error == nil {
+	// last `numDaysForReport1` days
+	var lastDaysForReport1 []BanActionLog
+	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, offsetDays-numDaysForReport1)).Find(&lastDaysForReport1); res.Error == nil {
 		// total count
-		result.Last7Days.TotalCount = len(last7Days)
+		result.LastDaysReport1.TotalCount = len(lastDaysForReport1)
 
-		for _, log := range last7Days {
+		for _, log := range lastDaysForReport1 {
 			// counts for protocols
-			oldCount, _ = result.Last7Days.ProtocolCounts.Get(log.Protocol)
-			result.Last7Days.ProtocolCounts.Set(log.Protocol, oldCount+1)
+			oldCount, _ = result.LastDaysReport1.ProtocolCounts.Get(log.Protocol)
+			result.LastDaysReport1.ProtocolCounts.Set(log.Protocol, oldCount+1)
 
 			// counts for countries
 			if log.Location != nil {
-				oldCount, _ = result.Last7Days.CountryCounts.Get(*log.Location)
-				result.Last7Days.CountryCounts.Set(*log.Location, oldCount+1)
+				oldCount, _ = result.LastDaysReport1.CountryCounts.Get(*log.Location)
+				result.LastDaysReport1.CountryCounts.Set(*log.Location, oldCount+1)
 			}
 		}
 	} else {
 		return result, res.Error
 	}
 
-	// last 30 days
-	var last30Days []BanActionLog
-	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, offsetDays-30)).Find(&last30Days); res.Error == nil {
-		result.Last30Days.TotalCount = len(last30Days)
+	// last `numDaysForReport2` days
+	var lastDaysForReport2 []BanActionLog
+	if res := d.db.Model(&BanActionLog{}).Where("created_at >= ?", time.Now().AddDate(0, 0, offsetDays-numDaysForReport2)).Find(&lastDaysForReport2); res.Error == nil {
+		result.LastDaysReport2.TotalCount = len(lastDaysForReport2)
 
-		for _, log := range last30Days {
+		for _, log := range lastDaysForReport2 {
 			// counts for protocols
-			oldCount, _ = result.Last30Days.ProtocolCounts.Get(log.Protocol)
-			result.Last30Days.ProtocolCounts.Set(log.Protocol, oldCount+1)
+			oldCount, _ = result.LastDaysReport2.ProtocolCounts.Get(log.Protocol)
+			result.LastDaysReport2.ProtocolCounts.Set(log.Protocol, oldCount+1)
 
 			// counts for countries
 			if log.Location != nil {
-				oldCount, _ = result.Last30Days.CountryCounts.Get(*log.Location)
-				result.Last30Days.CountryCounts.Set(*log.Location, oldCount+1)
+				oldCount, _ = result.LastDaysReport2.CountryCounts.Get(*log.Location)
+				result.LastDaysReport2.CountryCounts.Set(*log.Location, oldCount+1)
 			}
 		}
 	} else {
@@ -246,128 +250,165 @@ func (d *Database) generateReport(offsetDays int) (result Report, err error) {
 }
 
 // GetReportAsPlain generates report in plain text format.
-func (d *Database) GetReportAsPlain(offsetDays int) (result []byte, err error) {
+func (d *Database) GetReportAsPlain(offsetDays, numDaysForReport1, numDaysForReport2 int) (result []byte, err error) {
 	// generate report text
 	var report Report
-	if report, err = d.generateReport(offsetDays); err == nil {
-		protocols7 := []string{}
-		for _, kv := range sortKeyValues(report.Last7Days.ProtocolCounts) {
-			protocols7 = append(protocols7, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
+	if report, err = d.generateReport(offsetDays, numDaysForReport1, numDaysForReport2); err == nil {
+		protocolsForReport1 := []string{}
+		for _, kv := range sortKeyValues(report.LastDaysReport1.ProtocolCounts) {
+			protocolsForReport1 = append(protocolsForReport1, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
-		countries7 := []string{}
-		for _, kv := range sortKeyValues(report.Last7Days.CountryCounts) {
-			countries7 = append(countries7, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
+		countriesForReport1 := []string{}
+		for _, kv := range sortKeyValues(report.LastDaysReport1.CountryCounts) {
+			countriesForReport1 = append(countriesForReport1, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
-		protocols30 := []string{}
-		for _, kv := range report.Last30Days.ProtocolCounts {
-			protocols30 = append(protocols30, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
+		protocolsForReport2 := []string{}
+		for _, kv := range report.LastDaysReport2.ProtocolCounts {
+			protocolsForReport2 = append(protocolsForReport2, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
-		countries30 := []string{}
-		for _, kv := range report.Last30Days.CountryCounts {
-			countries30 = append(countries30, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
+		countriesForReport2 := []string{}
+		for _, kv := range report.LastDaysReport2.CountryCounts {
+			countriesForReport2 = append(countriesForReport2, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
 
 		return []byte(fmt.Sprintf(`
 Reference datetime: %[1]s
 
-Last 7 days
+Last %[2]d days
 ---
-* Total: %[2]d ban action(s)
+* Total: %[3]d ban action(s)
 
 * Protocols:
-%[3]s
-
-* Countries:
 %[4]s
 
+* Countries:
+%[5]s
 
-Last 30 days:
+
+Last %[6]d days:
 ---
-* Total: %[5]d ban action(s)
+* Total: %[7]d ban action(s)
 
 * Protocols:
-%[6]s
+%[8]s
 
 * Countries:
-%[7]s
+%[9]s
 `,
 			report.ReferenceDatetime,
-			report.Last7Days.TotalCount, strings.Join(protocols7, "\n"), strings.Join(countries7, "\n"),
-			report.Last30Days.TotalCount, strings.Join(protocols30, "\n"), strings.Join(countries30, "\n"),
+			numDaysForReport1, report.LastDaysReport1.TotalCount, strings.Join(protocolsForReport1, "\n"), strings.Join(countriesForReport1, "\n"),
+			numDaysForReport2, report.LastDaysReport2.TotalCount, strings.Join(protocolsForReport2, "\n"), strings.Join(countriesForReport2, "\n"),
 		)), nil
 	}
 
-	return []byte{}, err
+	return nil, err
+}
+
+// GetFinalReportAsPlain generates final report as plain text.
+func (d *Database) GetFinalReportAsPlain(report, insight []byte) (result []byte) {
+	if insight != nil {
+		result = []byte(fmt.Sprintf(`%[1]s
+
+===
+* Generated insights (by %[3]s):
+
+%[2]s`, string(report), string(insight), GoogleAIModel))
+	} else {
+		result = report
+	}
+
+	return result
 }
 
 // GetReportAsJSON generates report in json format.
-func (d *Database) GetReportAsJSON(offsetDays int) (result []byte, err error) {
+func (d *Database) GetReportAsJSON(offsetDays, numDaysForReport1, numDaysForReport2 int) (result []byte, err error) {
 	var report Report
-	if report, err = d.generateReport(offsetDays); err == nil {
+	if report, err = d.generateReport(offsetDays, numDaysForReport1, numDaysForReport2); err == nil {
 		var bytes []byte
 		if bytes, err = json.Marshal(report); err == nil {
 			return bytes, nil
 		}
 	}
 
-	return []byte{}, err
+	return nil, err
+}
+
+// GetFinalReportAsJSON generates final report as json.
+func (d *Database) GetFinalReportAsJSON(report, insight []byte) (result []byte) {
+	if insight != nil {
+		var tempReport Report
+		if err := json.Unmarshal(report, &tempReport); err == nil {
+			str := string(insight)
+			tempReport.Insight = &str
+
+			if temp, err := json.Marshal(tempReport); err == nil {
+				result = temp
+			} else {
+				result = report
+			}
+		}
+	} else {
+		result = report
+	}
+
+	return result
 }
 
 // GetReportAsTelegraph generates html report for posting to telegra.ph.
-func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string, offsetDays int) (result []byte, err error) {
+func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string, offsetDays, numDaysForReport1, numDaysForReport2 int) (result []byte, err error) {
 	var report Report
-	if report, err = d.generateReport(offsetDays); err == nil {
+	if report, err = d.generateReport(offsetDays, numDaysForReport1, numDaysForReport2); err == nil {
 		// generate report html
-		sort.Slice(report.Last7Days.ProtocolCounts, func(i, j int) bool {
-			return report.Last7Days.ProtocolCounts[i].Value > report.Last7Days.ProtocolCounts[j].Value
+		sort.Slice(report.LastDaysReport1.ProtocolCounts, func(i, j int) bool {
+			return report.LastDaysReport1.ProtocolCounts[i].Value > report.LastDaysReport1.ProtocolCounts[j].Value
 		})
-		protocols7 := []string{}
-		for _, kv := range sortKeyValues(report.Last7Days.ProtocolCounts) {
-			protocols7 = append(protocols7, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
+		protocolsForReport1 := []string{}
+		for _, kv := range sortKeyValues(report.LastDaysReport1.ProtocolCounts) {
+			protocolsForReport1 = append(protocolsForReport1, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
-		countries7 := []string{}
-		for _, kv := range sortKeyValues(report.Last7Days.CountryCounts) {
-			countries7 = append(countries7, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
+		countriesForReport1 := []string{}
+		for _, kv := range sortKeyValues(report.LastDaysReport1.CountryCounts) {
+			countriesForReport1 = append(countriesForReport1, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
-		protocols30 := []string{}
-		for _, kv := range sortKeyValues(report.Last30Days.ProtocolCounts) {
-			protocols30 = append(protocols30, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
+		protocolsForReport2 := []string{}
+		for _, kv := range sortKeyValues(report.LastDaysReport2.ProtocolCounts) {
+			protocolsForReport2 = append(protocolsForReport2, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
-		countries30 := []string{}
-		for _, kv := range sortKeyValues(report.Last30Days.CountryCounts) {
-			countries30 = append(countries30, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
+		countriesForReport2 := []string{}
+		for _, kv := range sortKeyValues(report.LastDaysReport2.CountryCounts) {
+			countriesForReport2 = append(countriesForReport2, fmt.Sprintf("• %s: %d", kv.Key, kv.Value))
 		}
 
 		html := fmt.Sprintf(
 			`<h4>Report (reference datetime: %[1]s)</h4>
 
 <p>
-<h4>Last 7 days</h4>
+<h4>Last %[2]d days</h4>
 
-<strong>Total</strong> %[2]d ban action(s)
+<strong>Total</strong> %[3]d ban action(s)
 
 <strong>Protocols</strong>
-%[3]s
+%[4]s
 
 <strong>Countries</strong>
-%[4]s
+%[5]s
 </p>
 <p>
-<h4>Last 30 days</h4>
+<h4>Last %[6]d days</h4>
 
-<strong>Total</strong> %[5]d ban action(s)
+<strong>Total</strong> %[7]d ban action(s)
 
 <strong>Protocols</strong>
-%[6]s
+%[8]s
 
 <strong>Countries</strong>
-%[7]s
+%[9]s
 </p>
 
-generated by <a href="%[8]s">balog</a>`,
+<i>report generated by <a href="%[10]s">balog</a></i>`,
 			report.ReferenceDatetime,
-			report.Last7Days.TotalCount, strings.Join(protocols7, "\n"), strings.Join(countries7, "\n"),
-			report.Last30Days.TotalCount, strings.Join(protocols30, "\n"), strings.Join(countries30, "\n"),
+			numDaysForReport1, report.LastDaysReport1.TotalCount, strings.Join(protocolsForReport1, "\n"), strings.Join(countriesForReport1, "\n"),
+			numDaysForReport2, report.LastDaysReport2.TotalCount, strings.Join(protocolsForReport2, "\n"), strings.Join(countriesForReport2, "\n"),
 			ProjectURL,
 		)
 
@@ -377,7 +418,26 @@ generated by <a href="%[8]s">balog</a>`,
 		return []byte(html), err
 	}
 
-	return []byte{}, err
+	return nil, err
+}
+
+// GetFinalReportAsTelegraph generates final report for telegra.ph.
+func (d *Database) GetFinalReportAsTelegraph(report, insight []byte) (result []byte) {
+	if insight != nil {
+		result = []byte(fmt.Sprintf(`%[1]s
+
+<p>
+<h4>Insights</h4>
+
+%[2]s
+</p>
+
+<i>insights generated by <strong>%[3]s</strong></i>`, string(report), string(insight), GoogleAIModel))
+	} else {
+		result = report
+	}
+
+	return result
 }
 
 // ListUnknownIPs returns list of ips where their locations are unknown.

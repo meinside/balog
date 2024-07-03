@@ -32,6 +32,7 @@ For posting reports to telegra.ph, set your telegraph access token like this:
 ```json
 {
   "db_filepath": "/path/to/database.db",
+
   "telegraph_access_token": "1234567890abcdefghijklmnopqrstuvwxyz"
 }
 ```
@@ -44,12 +45,25 @@ For fetching geolocations of banned IP addresses, set your [ipgeolocation.io](ht
 {
   "db_filepath": "/path/to/database.db",
 
-  "telegraph_access_token": "1234567890abcdefghijklmnopqrstuvwxyz",
   "ipgeolocation_api_key": "abcdefghijk1234567890"
 }
 ```
 
 If `ipgeolocation_api_key` is not set, locations will be saved as `Unknown`.
+
+### Google AI API Key
+
+For generating insights on logs with generative AI models, set your Google AI API key like this:
+
+```json
+{
+  "db_filepath": "/path/to/database.db",
+
+  "google_ai_api_key": "abcdefghijklmnopqrstuvwxyz0123456789"
+}
+```
+
+then it will try to generate some insights on the logs and append them to the report.
 
 ### Using Infisical
 
@@ -68,7 +82,8 @@ You can also use [Infisical](https://infisical.com/) for retrieving your access 
     "secret_type": "shared",
 
     "telegraph_access_token_key_path": "/path/to/your/KEY_TO_TELEGRAPH_ACCESS_TOKEN",
-    "ipgeolocation_api_key_key_path": "/path/to/your/KEY_TO_IPGEOLOCATION_API_KEY"
+    "ipgeolocation_api_key_key_path": "/path/to/your/KEY_TO_IPGEOLOCATION_API_KEY",
+    "google_ai_api_key_key_path": "/path/to/your/KEY_TO_GOOGLE_AI_API_KEY"
   }
 }
 ```
