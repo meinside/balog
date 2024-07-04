@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,9 +21,11 @@ import (
 	// hujson
 	"github.com/tailscale/hujson"
 
+	// infisical
+	infisical "github.com/infisical/go-sdk"
+	"github.com/infisical/go-sdk/packages/models"
+
 	// my libraries
-	"github.com/meinside/infisical-go"
-	"github.com/meinside/infisical-go/helper"
 	"github.com/meinside/telegraph-go"
 	"github.com/meinside/version-go"
 )
@@ -96,12 +99,12 @@ type config struct {
 		ClientID     string `json:"client_id"`
 		ClientSecret string `json:"client_secret"`
 
-		WorkspaceID string               `json:"workspace_id"`
-		Environment string               `json:"environment"`
-		SecretType  infisical.SecretType `json:"secret_type"`
+		ProjectID   string `json:"project_id"`
+		Environment string `json:"environment"`
+		SecretType  string `json:"secret_type"`
 
 		// Infisical key paths of API tokens and keys
-		TelegraphAccessTokenKeyPath string  `json:"telegraph_access_token_key_path"`
+		TelegraphAccessTokenKeyPath *string `json:"telegraph_access_token_key_path,omitempty"`
 		IPGeolocationAPIKeyKeyPath  *string `json:"ipgeolocation_api_key_key_path,omitempty"`
 		GoogleAIAPIKeyKeyPath       *string `json:"google_ai_api_key_key_path,omitempty"`
 	} `json:"infisical,omitempty"`
@@ -119,81 +122,113 @@ func standardizeJSON(b []byte) ([]byte, error) {
 }
 
 // get telegraph access token, retrieve it from infisicial if needed
-func (c *config) GetTelegraphAccessToken() *string {
-	// read access token from infisical
-	if c.TelegraphAccessToken == nil && c.Infisical != nil {
-		var accessToken string
+func (c *config) GetTelegraphAccessToken() (accessToken *string, err error) {
+	if (c.TelegraphAccessToken == nil || len(*c.TelegraphAccessToken) == 0) &&
+		c.Infisical != nil && c.Infisical.TelegraphAccessTokenKeyPath != nil {
+		// read access token from infisical
+		client := infisical.NewInfisicalClient(infisical.Config{
+			SiteUrl: "https://app.infisical.com",
+		})
 
-		var err error
-		accessToken, err = helper.Value(
-			c.Infisical.ClientID,
-			c.Infisical.ClientSecret,
-			c.Infisical.WorkspaceID,
-			c.Infisical.Environment,
-			c.Infisical.SecretType,
-			c.Infisical.TelegraphAccessTokenKeyPath,
-		)
-
+		_, err = client.Auth().UniversalAuthLogin(c.Infisical.ClientID, c.Infisical.ClientSecret)
 		if err != nil {
-			l("Failed to retrieve telegraph access token from infisical: %s", err)
+			fmt.Printf("* failed to authenticate with Infisical: %s", err)
+			return nil, err
 		}
 
-		c.TelegraphAccessToken = &accessToken
+		keyPath := *c.Infisical.TelegraphAccessTokenKeyPath
+
+		var secret models.Secret
+		secret, err = client.Secrets().Retrieve(infisical.RetrieveSecretOptions{
+			SecretKey:   path.Base(keyPath),
+			SecretPath:  path.Dir(keyPath),
+			ProjectID:   c.Infisical.ProjectID,
+			Type:        c.Infisical.SecretType,
+			Environment: c.Infisical.Environment,
+		})
+		if err != nil {
+			fmt.Printf("* failed to retrieve telegraph access token from infisical: %s\n", err)
+			return nil, err
+		}
+
+		c.TelegraphAccessToken = &secret.SecretValue
 	}
 
-	return c.TelegraphAccessToken
+	return c.TelegraphAccessToken, nil
 }
 
 // get ipgeolocation api key, retrieve it from infisical if needed
-func (c *config) GetIPGeolocationAPIKey() *string {
+func (c *config) GetIPGeolocationAPIKey() (apiKey *string, err error) {
 	// read api key from infisical
-	if c.IPGeolocationAPIKey == nil && c.Infisical != nil && c.Infisical.IPGeolocationAPIKeyKeyPath != nil {
-		var apiKey string
+	if (c.IPGeolocationAPIKey == nil || len(*c.IPGeolocationAPIKey) == 0) &&
+		c.Infisical != nil && c.Infisical.IPGeolocationAPIKeyKeyPath != nil {
+		// read access token from infisical
+		client := infisical.NewInfisicalClient(infisical.Config{
+			SiteUrl: "https://app.infisical.com",
+		})
 
-		var err error
-		apiKey, err = helper.Value(
-			c.Infisical.ClientID,
-			c.Infisical.ClientSecret,
-			c.Infisical.WorkspaceID,
-			c.Infisical.Environment,
-			c.Infisical.SecretType,
-			*c.Infisical.IPGeolocationAPIKeyKeyPath,
-		)
-
+		_, err = client.Auth().UniversalAuthLogin(c.Infisical.ClientID, c.Infisical.ClientSecret)
 		if err != nil {
-			l("Failed to retrieve ipgeolocation api key from infisical: %s", err)
+			fmt.Printf("* failed to authenticate with Infisical: %s", err)
+			return nil, err
 		}
 
-		c.IPGeolocationAPIKey = &apiKey
+		keyPath := *c.Infisical.IPGeolocationAPIKeyKeyPath
+
+		var secret models.Secret
+		secret, err = client.Secrets().Retrieve(infisical.RetrieveSecretOptions{
+			SecretKey:   path.Base(keyPath),
+			SecretPath:  path.Dir(keyPath),
+			ProjectID:   c.Infisical.ProjectID,
+			Type:        c.Infisical.SecretType,
+			Environment: c.Infisical.Environment,
+		})
+		if err != nil {
+			fmt.Printf("* failed to retrieve ip geolocation api key from infisical: %s\n", err)
+			return nil, err
+		}
+
+		c.IPGeolocationAPIKey = &secret.SecretValue
 	}
 
-	return c.IPGeolocationAPIKey
+	return c.IPGeolocationAPIKey, nil
 }
 
 // get google ai api key, retrieve it from infisical if needed
-func (c *config) GetGoogleAIAPIKey() *string {
+func (c *config) GetGoogleAIAPIKey() (apiKey *string, err error) {
 	// read api key from infisical
-	if c.GoogleAIAPIKey == nil && c.Infisical != nil && c.Infisical.GoogleAIAPIKeyKeyPath != nil {
-		var apiKey string
+	if (c.GoogleAIAPIKey == nil || len(*c.GoogleAIAPIKey) == 0) &&
+		c.Infisical != nil && c.Infisical.GoogleAIAPIKeyKeyPath != nil {
+		// read access token from infisical
+		client := infisical.NewInfisicalClient(infisical.Config{
+			SiteUrl: "https://app.infisical.com",
+		})
 
-		var err error
-		apiKey, err = helper.Value(
-			c.Infisical.ClientID,
-			c.Infisical.ClientSecret,
-			c.Infisical.WorkspaceID,
-			c.Infisical.Environment,
-			c.Infisical.SecretType,
-			*c.Infisical.GoogleAIAPIKeyKeyPath,
-		)
-
+		_, err = client.Auth().UniversalAuthLogin(c.Infisical.ClientID, c.Infisical.ClientSecret)
 		if err != nil {
-			l("Failed to retrieve google ai api key from infisical: %s", err)
+			fmt.Printf("* failed to authenticate with Infisical: %s", err)
+			return nil, err
 		}
 
-		c.GoogleAIAPIKey = &apiKey
+		keyPath := *c.Infisical.GoogleAIAPIKeyKeyPath
+
+		var secret models.Secret
+		secret, err = client.Secrets().Retrieve(infisical.RetrieveSecretOptions{
+			SecretKey:   path.Base(keyPath),
+			SecretPath:  path.Dir(keyPath),
+			ProjectID:   c.Infisical.ProjectID,
+			Type:        c.Infisical.SecretType,
+			Environment: c.Infisical.Environment,
+		})
+		if err != nil {
+			fmt.Printf("* failed to retrieve google ai api key from infisical: %s\n", err)
+			return nil, err
+		}
+
+		c.GoogleAIAPIKey = &secret.SecretValue
 	}
 
-	return c.GoogleAIAPIKey
+	return c.GoogleAIAPIKey, err
 }
 
 func init() {
@@ -256,13 +291,17 @@ func run(_ []string) {
 		case string(actionSave):
 			checkArg(ip, paramIP, actionSave)
 			checkArg(protocol, paramProtocol, actionSave)
-			processSave(db, protocol, ip, config.GetIPGeolocationAPIKey())
+			apiKey, _ := config.GetIPGeolocationAPIKey()
+			processSave(db, protocol, ip, apiKey)
 		case string(actionReport):
 			checkArg(format, paramFormat, actionReport)
-			processReport(db, format, config.GetTelegraphAccessToken(), config.GetGoogleAIAPIKey(), 0)
+			accessToken, _ := config.GetTelegraphAccessToken()
+			apiKey, _ := config.GetGoogleAIAPIKey()
+			processReport(db, format, accessToken, apiKey, 0)
 		case string(actionMaintenance):
 			checkArg(job, paramJob, actionMaintenance)
-			processMaintenance(db, job, config.GetIPGeolocationAPIKey())
+			apiKey, _ := config.GetIPGeolocationAPIKey()
+			processMaintenance(db, job, apiKey)
 		default:
 			l("Unknown action was given: '%s'", *action)
 			showUsage()
