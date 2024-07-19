@@ -25,7 +25,7 @@ const (
 
 	projectURL = "https://github.com/meinside/balog"
 
-	googleAIModel = "gemini-1.5-pro-latest"
+	googleAIModel = "gemini-1.5-flash-latest"
 )
 
 // BanActionLog represents a log of ban action
