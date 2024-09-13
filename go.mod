@@ -5,7 +5,7 @@ go 1.23.1
 require (
 	github.com/google/generative-ai-go v0.18.0
 	github.com/infisical/go-sdk v0.3.3
-	github.com/meinside/gemini-things-go v0.0.1
+	github.com/meinside/gemini-things-go v0.0.2
 	github.com/meinside/ipgeolocation.io-go v0.0.2
 	github.com/meinside/telegraph-go v0.1.1
 	github.com/meinside/version-go v0.0.3
