@@ -16,7 +16,6 @@ import (
 
 	// google ai
 	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
 
 	// hujson
 	"github.com/tailscale/hujson"
@@ -26,6 +25,7 @@ import (
 	"github.com/infisical/go-sdk/packages/models"
 
 	// my libraries
+	gt "github.com/meinside/gemini-things-go"
 	"github.com/meinside/telegraph-go"
 	"github.com/meinside/version-go"
 )
@@ -577,19 +577,12 @@ func generateInsight(googleAIAPIKey *string, olderReport, recentReport []byte) (
 
 	ctx := context.TODO()
 
-	var client *genai.Client
-	if client, err = genai.NewClient(ctx, option.WithAPIKey(*googleAIAPIKey)); err == nil {
-		model := client.GenerativeModel(googleAIModel)
+	client := gt.NewClient(googleAIModel, *googleAIAPIKey)
+	client.SetSystemInstructionFunc(func() string {
+		return systemInstructionForInsightGeneration
+	})
 
-		// set system instruction
-		model.SystemInstruction = &genai.Content{
-			Role: "model",
-			Parts: []genai.Part{
-				genai.Text(systemInstructionForInsightGeneration),
-			},
-		}
-
-		prompt := fmt.Sprintf(`Following are summarized reports of ban action logs and the geolocations of the logs.
+	prompt := fmt.Sprintf(`Following are summarized reports of ban action logs and the geolocations of the logs.
 Analyze these reports and offer system or security insights based on the analysis.
 Highlight and explain any unusual patterns or noteworthy findings.
 
@@ -601,35 +594,24 @@ Highlight and explain any unusual patterns or noteworthy findings.
 %[2]s
 </recent_report>`, string(olderReport), string(recentReport))
 
-		session := model.StartChat()
-		session.History = []*genai.Content{}
+	var res *genai.GenerateContentResponse
+	if res, err = client.Generate(ctx, prompt, nil); err == nil {
+		if len(res.Candidates) > 0 {
+			parts := res.Candidates[0].Content.Parts
 
-		// set prompt
-		parts := []genai.Part{
-			genai.Text(prompt),
-		}
-
-		var res *genai.GenerateContentResponse
-		if res, err = session.SendMessage(ctx, parts...); err == nil {
-			if len(res.Candidates) > 0 {
-				parts := res.Candidates[0].Content.Parts
-
-				for _, part := range parts {
-					if text, ok := part.(genai.Text); ok {
-						generated += string(text) + "\n"
-					} else if data, ok := part.(genai.Blob); ok {
-						generated += fmt.Sprintf("%d byte(s) of %s\n", len(data.Data), data.MIMEType)
-					} else {
-						err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
-					}
+			for _, part := range parts {
+				if text, ok := part.(genai.Text); ok {
+					generated += string(text) + "\n"
+				} else if data, ok := part.(genai.Blob); ok {
+					generated += fmt.Sprintf("%d byte(s) of %s\n", len(data.Data), data.MIMEType)
+				} else {
+					err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
 				}
-			} else {
-				err = fmt.Errorf("no candidate returned from Gemini API")
 			}
+		} else {
+			err = fmt.Errorf("no candidate returned from Gemini API")
 		}
 	}
-
-	defer client.Close()
 
 	return []byte(generated), err
 }
