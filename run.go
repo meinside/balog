@@ -45,6 +45,8 @@ const (
 )
 
 const (
+	insightGenerationTimeoutSeconds = 60 * 3 // 3 minutes
+
 	systemInstructionForInsightGeneration = `You are a chatbot which analyzes fail2ban ban action logs and IP-based geolocation data to generate insights for the user. Offer system or security insights based on the analysis. Highlight and explain any unusual patterns or noteworthy findings. Your response must be in plain text, so do not try to emphasize words with markdown characters.`
 )
 
@@ -577,8 +579,9 @@ func generateInsight(googleAIAPIKey *string, olderReport, recentReport []byte) (
 
 	ctx := context.TODO()
 
-	client := gt.NewClient(googleAIModel, *googleAIAPIKey)
-	client.SetSystemInstructionFunc(func() string {
+	gtc := gt.NewClient(googleAIModel, *googleAIAPIKey)
+	gtc.SetTimeout(insightGenerationTimeoutSeconds)
+	gtc.SetSystemInstructionFunc(func() string {
 		return systemInstructionForInsightGeneration
 	})
 
@@ -595,7 +598,7 @@ Highlight and explain any unusual patterns or noteworthy findings.
 </recent_report>`, string(olderReport), string(recentReport))
 
 	var res *genai.GenerateContentResponse
-	if res, err = client.Generate(ctx, prompt, nil); err == nil {
+	if res, err = gtc.Generate(ctx, prompt, nil); err == nil {
 		if len(res.Candidates) > 0 {
 			parts := res.Candidates[0].Content.Parts
 
