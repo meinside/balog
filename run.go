@@ -128,7 +128,7 @@ func (c *config) GetTelegraphAccessToken() (accessToken *string, err error) {
 	if (c.TelegraphAccessToken == nil || len(*c.TelegraphAccessToken) == 0) &&
 		c.Infisical != nil && c.Infisical.TelegraphAccessTokenKeyPath != nil {
 		// read access token from infisical
-		client := infisical.NewInfisicalClient(infisical.Config{
+		client := infisical.NewInfisicalClient(context.TODO(), infisical.Config{
 			SiteUrl: "https://app.infisical.com",
 		})
 
@@ -165,7 +165,7 @@ func (c *config) GetIPGeolocationAPIKey() (apiKey *string, err error) {
 	if (c.IPGeolocationAPIKey == nil || len(*c.IPGeolocationAPIKey) == 0) &&
 		c.Infisical != nil && c.Infisical.IPGeolocationAPIKeyKeyPath != nil {
 		// read access token from infisical
-		client := infisical.NewInfisicalClient(infisical.Config{
+		client := infisical.NewInfisicalClient(context.TODO(), infisical.Config{
 			SiteUrl: "https://app.infisical.com",
 		})
 
@@ -202,7 +202,7 @@ func (c *config) GetGoogleAIAPIKey() (apiKey *string, err error) {
 	if (c.GoogleAIAPIKey == nil || len(*c.GoogleAIAPIKey) == 0) &&
 		c.Infisical != nil && c.Infisical.GoogleAIAPIKeyKeyPath != nil {
 		// read access token from infisical
-		client := infisical.NewInfisicalClient(infisical.Config{
+		client := infisical.NewInfisicalClient(context.TODO(), infisical.Config{
 			SiteUrl: "https://app.infisical.com",
 		})
 
