@@ -4,8 +4,8 @@ go 1.23.1
 
 require (
 	github.com/google/generative-ai-go v0.18.0
-	github.com/infisical/go-sdk v0.3.3
-	github.com/meinside/gemini-things-go v0.1.1
+	github.com/infisical/go-sdk v0.3.6
+	github.com/meinside/gemini-things-go v0.1.4
 	github.com/meinside/ipgeolocation.io-go v0.0.2
 	github.com/meinside/telegraph-go v0.1.1
 	github.com/meinside/version-go v0.0.3
@@ -37,6 +37,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.2 // indirect
 	github.com/aws/smithy-go v1.22.0 // indirect
+	github.com/fatih/color v1.17.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -49,6 +50,8 @@ require (
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.24 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.56.0 // indirect
