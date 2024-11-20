@@ -438,7 +438,7 @@ func processReport(db *Database, format *string, telegraphAccessToken, googleAIA
 		// generate some insights from older/recent reports with google ai model
 		if googleAIAPIKey != nil {
 			if older, _ = db.GetReportAsPlain(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
-				if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
+				if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
 					l("Failed to generate insights: %s", err)
 				}
 			}
@@ -452,7 +452,7 @@ func processReport(db *Database, format *string, telegraphAccessToken, googleAIA
 		// generate some insights from older/recent reports with google ai model
 		if googleAIAPIKey != nil {
 			if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
-				if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
+				if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
 					l("Failed to generate insights: %s", err)
 				}
 			}
@@ -478,7 +478,7 @@ func processReport(db *Database, format *string, telegraphAccessToken, googleAIA
 			// generate some insights from older/recent reports with google ai model
 			if googleAIAPIKey != nil {
 				if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
-					if insight, err = generateInsight(googleAIAPIKey, older, recent); err != nil {
+					if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
 						l("Failed to generate insights: %s", err)
 					}
 				}
@@ -574,14 +574,14 @@ Still unresolved: %d`, len(resolved), len(unresolved))
 }
 
 // generate insights with google api model
-func generateInsight(googleAIAPIKey *string, olderReport, recentReport []byte) (insight []byte, err error) {
+func generateInsight(googleAIAPIKey string, olderReport, recentReport []byte) (insight []byte, err error) {
 	generated := ""
 
 	ctx := context.TODO()
 
 	// gemini-things client
 	var gtc *gt.Client
-	if gtc, err = gt.NewClient(googleAIModel, *googleAIAPIKey); err != nil {
+	if gtc, err = gt.NewClient(googleAIAPIKey, googleAIModel); err != nil {
 		return nil, fmt.Errorf("error initializing gemini-things client: %s", err)
 	}
 	defer gtc.Close()
