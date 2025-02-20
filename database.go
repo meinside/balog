@@ -25,7 +25,7 @@ const (
 
 	projectURL = "https://github.com/meinside/balog"
 
-	googleAIModel = "gemini-1.5-flash-latest"
+	googleAIModel = "gemini-2.0-flash"
 )
 
 // BanActionLog represents a log of ban action
@@ -415,7 +415,7 @@ func (d *Database) GetReportAsTelegraph(telegraphAccessToken *string, offsetDays
 		)
 
 		// debug log
-		//l("Telegraph HTML: %s\n", html)
+		// l("Telegraph HTML: %s\n", html)
 
 		return []byte(html), err
 	}
