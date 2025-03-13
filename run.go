@@ -15,7 +15,7 @@ import (
 	"time"
 
 	// google ai
-	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/genai"
 
 	// hujson
 	"github.com/tailscale/hujson"
@@ -258,12 +258,12 @@ $ %[1]s -config <config_filepath> ...
 // run processes command line arguments
 func run(_ []string) {
 	// parse params
-	var configFilepath *string = flag.String(paramConfig, "", "Config filepath")
-	var action *string = flag.String(paramAction, "", "Action to perform")
-	var ip *string = flag.String(paramIP, "", "IP address of the ban action")
-	var protocol *string = flag.String(paramProtocol, "", "Protocol of the ban action")
-	var format *string = flag.String(paramFormat, "", "Output format of the report")
-	var job *string = flag.String(paramJob, "", "Maintenance job to perform")
+	configFilepath := flag.String(paramConfig, "", "Config filepath")
+	action := flag.String(paramAction, "", "Action to perform")
+	ip := flag.String(paramIP, "", "IP address of the ban action")
+	protocol := flag.String(paramProtocol, "", "Protocol of the ban action")
+	format := flag.String(paramFormat, "", "Output format of the report")
+	job := flag.String(paramJob, "", "Maintenance job to perform")
 	flag.Parse()
 
 	if config, err := loadConfig(configFilepath); err == nil {
@@ -603,15 +603,15 @@ Highlight and explain any unusual patterns or noteworthy findings.
 </recent_report>`, string(olderReport), string(recentReport))
 
 	var res *genai.GenerateContentResponse
-	if res, err = gtc.Generate(ctx, prompt, nil); err == nil {
+	if res, err = gtc.Generate(ctx, []gt.Prompt{gt.NewTextPrompt(prompt)}); err == nil {
 		if len(res.Candidates) > 0 {
 			parts := res.Candidates[0].Content.Parts
 
 			for _, part := range parts {
-				if text, ok := part.(genai.Text); ok {
-					generated += string(text) + "\n"
-				} else if data, ok := part.(genai.Blob); ok {
-					generated += fmt.Sprintf("%d byte(s) of %s\n", len(data.Data), data.MIMEType)
+				if part.Text != "" {
+					generated += part.Text + "\n"
+				} else if part.InlineData != nil {
+					generated += fmt.Sprintf("%d byte(s) of %s\n", len(part.InlineData.Data), part.InlineData.MIMEType)
 				} else {
 					err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
 				}
