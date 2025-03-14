@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/infisical/go-sdk v0.5.0
-	github.com/meinside/gemini-things-go v0.2.1
+	github.com/meinside/gemini-things-go v0.2.2
 	github.com/meinside/ipgeolocation.io-go v0.0.2
 	github.com/meinside/telegraph-go v0.1.3
 	github.com/meinside/version-go v0.0.3
