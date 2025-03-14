@@ -603,7 +603,9 @@ Highlight and explain any unusual patterns or noteworthy findings.
 </recent_report>`, string(olderReport), string(recentReport))
 
 	var res *genai.GenerateContentResponse
-	if res, err = gtc.Generate(ctx, []gt.Prompt{gt.NewTextPrompt(prompt)}); err == nil {
+	if res, err = gtc.Generate(ctx, []gt.Prompt{
+		gt.PromptFromText(prompt),
+	}); err == nil {
 		if len(res.Candidates) > 0 {
 			parts := res.Candidates[0].Content.Parts
 
