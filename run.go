@@ -581,11 +581,14 @@ func generateInsight(googleAIAPIKey string, olderReport, recentReport []byte) (i
 
 	// gemini-things client
 	var gtc *gt.Client
-	if gtc, err = gt.NewClient(googleAIAPIKey, googleAIModel); err != nil {
+	if gtc, err = gt.NewClient(
+		googleAIAPIKey,
+		gt.WithModel(googleAIModel),
+	); err != nil {
 		return nil, fmt.Errorf("error initializing gemini-things client: %s", err)
 	}
 	defer gtc.Close()
-	gtc.SetTimeout(insightGenerationTimeoutSeconds)
+	gtc.SetTimeoutSeconds(insightGenerationTimeoutSeconds)
 	gtc.SetSystemInstructionFunc(func() string {
 		return systemInstructionForInsightGeneration
 	})
