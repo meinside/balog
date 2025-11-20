@@ -53,7 +53,7 @@ If `ipgeolocation_api_key` is not set, locations will be saved as `Unknown`.
 
 ### Google AI API Key
 
-For generating insights on logs with generative AI models, set [your Google AI API key](https://aistudio.google.com/app/apikey) like this:
+For generating insights on logs with generative AI models, set [your Google AI API key](https://aistudio.google.com/app/api-keys) like this:
 
 ```json
 {

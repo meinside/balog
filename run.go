@@ -365,7 +365,7 @@ func loadConfig(customConfigFilepath *string) (cfg config, err error) {
 		// create a default config file
 		var file *os.File
 		if file, err = os.Create(configFilepath); err == nil {
-			defer file.Close()
+			defer func() { _ = file.Close() }()
 
 			dbDirpath := filepath.Dir(configFilepath)
 			dbFilepath := filepath.Join(dbDirpath, defaultDBFilename)
@@ -427,39 +427,60 @@ func processSave(db *Database, protocol, ip, geolocAPIKey *string) {
 }
 
 // process report job
-func processReport(db *Database, format *string, telegraphAccessToken, googleAIAPIKey *string, offsetDays int) {
+func processReport(
+	db *Database,
+	format *string,
+	telegraphAccessToken, googleAIAPIKey *string,
+	offsetDays int,
+) {
 	var err error
 	var recent, older, insight, report []byte
 
 	switch *format {
 	case string(reportFormatPlain):
-		recent, err = db.GetReportAsPlain(offsetDays, numDaysForReport1, numDaysForReport2)
-
-		// generate some insights from older/recent reports with google ai model
-		if googleAIAPIKey != nil {
-			if older, _ = db.GetReportAsPlain(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
-				if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
-					l("Failed to generate insights: %s", err)
+		if recent, err = db.GetReportAsPlain(
+			offsetDays,
+			numDaysForReport1,
+			numDaysForReport2,
+		); err == nil {
+			// generate some insights from older/recent reports with google ai model
+			if googleAIAPIKey != nil {
+				if older, _ = db.GetReportAsPlain(
+					offsetDays-numDaysBeforeForOlderReport,
+					numDaysForReport1,
+					numDaysForReport2,
+				); older != nil {
+					if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
+						l("Failed to generate insights: %s", err)
+					}
 				}
 			}
-		}
 
-		// final report
-		report = db.GetFinalReportAsPlain(recent, insight)
+			// final report
+			report = db.GetFinalReportAsPlain(recent, insight)
+		}
 	case string(reportFormatJSON):
-		recent, err = db.GetReportAsJSON(offsetDays, numDaysForReport1, numDaysForReport2)
-
-		// generate some insights from older/recent reports with google ai model
-		if googleAIAPIKey != nil {
-			if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
-				if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
-					l("Failed to generate insights: %s", err)
+		if recent, err = db.GetReportAsJSON(
+			offsetDays,
+			numDaysForReport1,
+			numDaysForReport2,
+		); err == nil {
+			// generate some insights from older/recent reports with google ai model
+			if googleAIAPIKey != nil {
+				if older, _ = db.GetReportAsJSON(
+					offsetDays-numDaysBeforeForOlderReport,
+					numDaysForReport1,
+					numDaysForReport2,
+				); older != nil {
+					if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
+						l("Failed to generate insights: %s", err)
+					}
 				}
 			}
-		}
 
-		// final report
-		report = db.GetFinalReportAsJSON(recent, insight)
+			// final report
+			report = db.GetFinalReportAsJSON(recent, insight)
+		}
 	case string(reportFormatTelegraph):
 		var client *telegraph.Client
 		if telegraphAccessToken == nil {
@@ -474,10 +495,20 @@ func processReport(db *Database, format *string, telegraphAccessToken, googleAIA
 			}
 		}
 
-		if recent, err = db.GetReportAsTelegraph(telegraphAccessToken, offsetDays, numDaysForReport1, numDaysForReport2); err == nil {
+		if recent, err = db.GetReportAsTelegraph(
+			telegraphAccessToken,
+			offsetDays,
+			numDaysForReport1,
+			numDaysForReport2,
+		); err == nil {
 			// generate some insights from older/recent reports with google ai model
 			if googleAIAPIKey != nil {
-				if older, _ = db.GetReportAsJSON(offsetDays-numDaysBeforeForOlderReport, numDaysForReport1, numDaysForReport2); older != nil {
+				if older, _ = db.GetReportAsTelegraph(
+					telegraphAccessToken,
+					offsetDays-numDaysBeforeForOlderReport,
+					numDaysForReport1,
+					numDaysForReport2,
+				); older != nil {
 					if insight, err = generateInsight(*googleAIAPIKey, older, recent); err != nil {
 						l("Failed to generate insights: %s", err)
 					}
@@ -487,6 +518,7 @@ func processReport(db *Database, format *string, telegraphAccessToken, googleAIA
 			// final report
 			report = db.GetFinalReportAsTelegraph(recent, insight)
 
+			// post to telegraph
 			var url string
 			if url, err = postToTelegraphAndReturnURL(client, report, offsetDays); err == nil {
 				report = []byte(url)
@@ -500,8 +532,9 @@ func processReport(db *Database, format *string, telegraphAccessToken, googleAIA
 	if err != nil {
 		lexit(1, "Failed to generate report: %s", err)
 	} else {
-		os.Stdout.Write(report)
-		os.Stdout.Write([]byte("\n"))
+		// print to stdout
+		_, _ = os.Stdout.Write(report)
+		_, _ = os.Stdout.Write([]byte("\n"))
 	}
 }
 
@@ -574,7 +607,10 @@ Still unresolved: %d`, len(resolved), len(unresolved))
 }
 
 // generate insights with google api model
-func generateInsight(googleAIAPIKey string, olderReport, recentReport []byte) (insight []byte, err error) {
+func generateInsight(
+	googleAIAPIKey string,
+	olderReport, recentReport []byte,
+) (insight []byte, err error) {
 	generated := ""
 
 	ctx := context.TODO()
@@ -587,7 +623,7 @@ func generateInsight(googleAIAPIKey string, olderReport, recentReport []byte) (i
 	); err != nil {
 		return nil, fmt.Errorf("error initializing gemini-things client: %s", err)
 	}
-	defer gtc.Close()
+	defer func() { _ = gtc.Close() }()
 	gtc.SetTimeoutSeconds(insightGenerationTimeoutSeconds)
 	gtc.SetSystemInstructionFunc(func() string {
 		return systemInstructionForInsightGeneration
@@ -605,25 +641,30 @@ Highlight and explain any unusual patterns or noteworthy findings.
 %[2]s
 </recent_report>`, string(olderReport), string(recentReport))
 
-	var res *genai.GenerateContentResponse
-	if res, err = gtc.Generate(ctx, []gt.Prompt{
+	var contents []*genai.Content
+	if contents, err = gtc.PromptsToContents(ctx, []gt.Prompt{
 		gt.PromptFromText(prompt),
-	}); err == nil {
-		if len(res.Candidates) > 0 {
-			parts := res.Candidates[0].Content.Parts
+	}, nil); err == nil {
+		var res *genai.GenerateContentResponse
+		if res, err = gtc.Generate(ctx, contents); err == nil {
+			if len(res.Candidates) > 0 {
+				parts := res.Candidates[0].Content.Parts
 
-			for _, part := range parts {
-				if part.Text != "" {
-					generated += part.Text + "\n"
-				} else if part.InlineData != nil {
-					generated += fmt.Sprintf("%d byte(s) of %s\n", len(part.InlineData.Data), part.InlineData.MIMEType)
-				} else {
-					err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
+				for _, part := range parts {
+					if part.Text != "" {
+						generated += part.Text + "\n"
+					} else if part.InlineData != nil {
+						generated += fmt.Sprintf("%d byte(s) of %s\n", len(part.InlineData.Data), part.InlineData.MIMEType)
+					} else {
+						err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
+					}
 				}
+			} else {
+				err = fmt.Errorf("no candidate returned from Gemini API")
 			}
-		} else {
-			err = fmt.Errorf("no candidate returned from Gemini API")
 		}
+	} else {
+		err = fmt.Errorf("failed to convert prompts/files to contents: %w", err)
 	}
 
 	return []byte(generated), err
