@@ -31,12 +31,12 @@ import (
 )
 
 const (
-	applicationName = "balog"
+	applicationName = `balog`
 
-	fallbackConfigDir = ".config/" + applicationName
+	fallbackConfigDir = `.config/` + applicationName
 
-	defaultConfigFilename = "config.json"
-	defaultDBFilename     = "database.db"
+	defaultConfigFilename = `config.json`
+	defaultDBFilename     = `database.db`
 
 	// number of days for reporting
 	numDaysForReport1           = 7  // last 7 days
@@ -45,46 +45,51 @@ const (
 )
 
 const (
-	insightGenerationTimeoutSeconds = 60 * 3 // 3 minutes
+	insightGenerationTimeoutSeconds = 60 // 1 minute
 
-	systemInstructionForInsightGeneration = `You are a chatbot which analyzes fail2ban ban action logs and IP-based geolocation data to generate insights for the user. Offer system or security insights based on the analysis. Highlight and explain any unusual patterns or noteworthy findings. Your response must be in plain text, so do not try to emphasize words with markdown characters.`
+	systemInstructionForInsights = `You are an agent which analyzes fail2ban ban action logs and IP-based geolocation data to generate security insights for the user.
+
+- Offer system/security insights and/or advices based on your analysis.
+- Highlight and explain any unusual patterns or noteworthy findings.
+- Your response must be in plain text, so do not try to emphasize words with markdown characters.
+`
 )
 
 // param names
 const (
-	paramConfig   = "config"
-	paramAction   = "action"
-	paramIP       = "ip"
-	paramProtocol = "protocol"
-	paramFormat   = "format"
-	paramJob      = "job"
+	paramConfig   = `config`
+	paramAction   = `action`
+	paramIP       = `ip`
+	paramProtocol = `protocol`
+	paramFormat   = `format`
+	paramJob      = `job`
 )
 
 type action string
 
 // action names
 const (
-	actionSave        action = "save"
-	actionReport      action = "report"
-	actionMaintenance action = "maintenance"
+	actionSave        action = `save`
+	actionReport      action = `report`
+	actionMaintenance action = `maintenance`
 )
 
 type reportFormat string
 
 // report formats
 const (
-	reportFormatPlain     reportFormat = "plain"
-	reportFormatJSON      reportFormat = "json"
-	reportFormatTelegraph reportFormat = "telegraph"
+	reportFormatPlain     reportFormat = `plain`
+	reportFormatJSON      reportFormat = `json`
+	reportFormatTelegraph reportFormat = `telegraph`
 )
 
 type maintenanceJob string
 
 // maintenance jobs
 const (
-	maintenanceJobListUnknownIPs    maintenanceJob = "list_unknown_ips"
-	maintenanceJobResolveUnknownIPs maintenanceJob = "resolve_unknown_ips"
-	maintenanceJobPurgeLogs         maintenanceJob = "purge_logs"
+	maintenanceJobListUnknownIPs    maintenanceJob = `list_unknown_ips`
+	maintenanceJobResolveUnknownIPs maintenanceJob = `resolve_unknown_ips`
+	maintenanceJobPurgeLogs         maintenanceJob = `purge_logs`
 )
 
 // config struct
@@ -258,12 +263,12 @@ $ %[1]s -config <config_filepath> ...
 // run processes command line arguments
 func run(_ []string) {
 	// parse params
-	configFilepath := flag.String(paramConfig, "", "Config filepath")
-	action := flag.String(paramAction, "", "Action to perform")
-	ip := flag.String(paramIP, "", "IP address of the ban action")
-	protocol := flag.String(paramProtocol, "", "Protocol of the ban action")
-	format := flag.String(paramFormat, "", "Output format of the report")
-	job := flag.String(paramJob, "", "Maintenance job to perform")
+	configFilepath := flag.String(paramConfig, "", `Config filepath`)
+	action := flag.String(paramAction, "", `Action to perform`)
+	ip := flag.String(paramIP, "", `IP address of the ban action`)
+	protocol := flag.String(paramProtocol, "", `Protocol of the ban action`)
+	format := flag.String(paramFormat, "", `Output format of the report`)
+	job := flag.String(paramJob, "", `Maintenance job to perform`)
 	flag.Parse()
 
 	if config, err := loadConfig(configFilepath); err == nil {
@@ -611,9 +616,7 @@ func generateInsight(
 	googleAIAPIKey string,
 	olderReport, recentReport []byte,
 ) (insight []byte, err error) {
-	generated := ""
-
-	ctx := context.TODO()
+	var generated strings.Builder
 
 	// gemini-things client
 	var gtc *gt.Client
@@ -624,9 +627,8 @@ func generateInsight(
 		return nil, fmt.Errorf("error initializing gemini-things client: %s", err)
 	}
 	defer func() { _ = gtc.Close() }()
-	gtc.SetTimeoutSeconds(insightGenerationTimeoutSeconds)
 	gtc.SetSystemInstructionFunc(func() string {
-		return systemInstructionForInsightGeneration
+		return systemInstructionForInsights
 	})
 
 	prompt := fmt.Sprintf(`Following are summarized reports of ban action logs and the geolocations of the logs.
@@ -641,20 +643,26 @@ Highlight and explain any unusual patterns or noteworthy findings.
 %[2]s
 </recent_report>`, string(olderReport), string(recentReport))
 
+	ctxContents, cancelContents := context.WithTimeout(context.TODO(), insightGenerationTimeoutSeconds*time.Second)
+	defer cancelContents()
+
 	var contents []*genai.Content
-	if contents, err = gtc.PromptsToContents(ctx, []gt.Prompt{
+	if contents, err = gtc.PromptsToContents(ctxContents, []gt.Prompt{
 		gt.PromptFromText(prompt),
 	}, nil); err == nil {
+		ctxGeneration, cancelGeneration := context.WithTimeout(context.TODO(), insightGenerationTimeoutSeconds*time.Second)
+		defer cancelGeneration()
+
 		var res *genai.GenerateContentResponse
-		if res, err = gtc.Generate(ctx, contents); err == nil {
+		if res, err = gtc.Generate(ctxGeneration, contents); err == nil {
 			if len(res.Candidates) > 0 {
 				parts := res.Candidates[0].Content.Parts
 
 				for _, part := range parts {
 					if part.Text != "" {
-						generated += part.Text + "\n"
+						generated.WriteString(part.Text + "\n")
 					} else if part.InlineData != nil {
-						generated += fmt.Sprintf("%d byte(s) of %s\n", len(part.InlineData.Data), part.InlineData.MIMEType)
+						fmt.Fprintf(&generated, "%d byte(s) of %s\n", len(part.InlineData.Data), part.InlineData.MIMEType)
 					} else {
 						err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
 					}
@@ -667,5 +675,5 @@ Highlight and explain any unusual patterns or noteworthy findings.
 		err = fmt.Errorf("failed to convert prompts/files to contents: %w", err)
 	}
 
-	return []byte(generated), err
+	return []byte(generated.String()), err
 }
