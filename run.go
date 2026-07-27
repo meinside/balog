@@ -449,7 +449,7 @@ func processReport(
 			numDaysForReport2,
 		); err == nil {
 			// generate some insights from older/recent reports with google ai model
-			if googleAIAPIKey != nil {
+			if googleAIAPIKey != nil && hasDataForInsight(db, offsetDays) {
 				if older, _ = db.GetReportAsPlain(
 					offsetDays-numDaysBeforeForOlderReport,
 					numDaysForReport1,
@@ -471,7 +471,7 @@ func processReport(
 			numDaysForReport2,
 		); err == nil {
 			// generate some insights from older/recent reports with google ai model
-			if googleAIAPIKey != nil {
+			if googleAIAPIKey != nil && hasDataForInsight(db, offsetDays) {
 				if older, _ = db.GetReportAsJSON(
 					offsetDays-numDaysBeforeForOlderReport,
 					numDaysForReport1,
@@ -507,7 +507,7 @@ func processReport(
 			numDaysForReport2,
 		); err == nil {
 			// generate some insights from older/recent reports with google ai model
-			if googleAIAPIKey != nil {
+			if googleAIAPIKey != nil && hasDataForInsight(db, offsetDays) {
 				if older, _ = db.GetReportAsTelegraph(
 					telegraphAccessToken,
 					offsetDays-numDaysBeforeForOlderReport,
@@ -611,6 +611,20 @@ Still unresolved: %d`, len(resolved), len(unresolved))
 	}
 }
 
+// hasDataForInsight reports whether there are any ban actions across the full
+// span analyzed for insights (from the older report's start through the recent
+// report's end), so we can skip the Gemini call when there is nothing to analyze.
+func hasDataForInsight(db *Database, offsetDays int) bool {
+	span := numDaysBeforeForOlderReport + numDaysForReport2
+	exists, err := db.HasBanActions(offsetDays, span)
+	if err != nil {
+		l("Failed to check ban actions for insight: %s", err)
+		return false
+	}
+
+	return exists
+}
+
 // generate insights with google api model
 func generateInsight(
 	googleAIAPIKey string,
@@ -660,11 +674,13 @@ Highlight and explain any unusual patterns or noteworthy findings.
 
 				for _, part := range parts {
 					if part.Text != "" {
-						generated.WriteString(part.Text + "\n")
+						generated.WriteString(part.Text)
+						generated.WriteByte('\n')
 					} else if part.InlineData != nil {
 						fmt.Fprintf(&generated, "%d byte(s) of %s\n", len(part.InlineData.Data), part.InlineData.MIMEType)
 					} else {
 						err = fmt.Errorf("unsupported type of part returned from Gemini API: %+v", part)
+						break
 					}
 				}
 			} else {
