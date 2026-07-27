@@ -25,7 +25,7 @@ const (
 
 	projectURL = "https://github.com/meinside/balog"
 
-	googleAIModel = `gemini-2.5-flash`
+	googleAIModel = `gemini-3.6-flash`
 )
 
 // BanActionLog represents a log of ban action
@@ -282,7 +282,8 @@ func (d *Database) GetReportAsPlain(offsetDays, numDaysForReport1, numDaysForRep
 			countriesForReport2 = append(countriesForReport2, fmt.Sprintf("  %s: %d", kv.Key, kv.Value))
 		}
 
-		return fmt.Appendf(nil, `
+		return fmt.Appendf(
+			nil, `
 >>> Generated Report:
 
 > %[1]s (%[2]d days)
